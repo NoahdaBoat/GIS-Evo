@@ -64,15 +64,15 @@ bool compare_relation_names(each_relation e1) {
 }
 
 void initSubwayStations(){
-    ezgl::point2d increment(0,10);
+    Point2D increment{0, 10};
     for(unsigned node_idx =0; node_idx < getNumberOfNodes();node_idx++){
         const OSMNode *current_node = getNodeByIndex(node_idx);
             for(unsigned tag = 0; tag < getTagCount(current_node); tag++ ){
                 std::pair<std::string,std::string> tag_pair = getTagPair(current_node,tag);
                 if(tag_pair.first == "station" && tag_pair.second == "subway"){
                     const OSMNode* node = getNodeByIndex(node_idx);
-                    ezgl::point2d position =latlonTopoint(getNodeCoords(node));
-                    ezgl::point2d text_pos = position + increment;
+                    Point2D position = latlonTopoint(getNodeCoords(node));
+                    Point2D text_pos{position.x + increment.x, position.y + increment.y};
                     std::string name;
                     for(unsigned j = 0; j< getTagCount(current_node);j++){
                         std::pair<std::string,std::string> pairs= getTagPair(current_node,j);

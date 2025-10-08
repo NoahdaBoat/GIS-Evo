@@ -11,7 +11,7 @@
 #include "StreetsDatabaseAPI.h"
 #include "OSMDatabaseAPI.h"
 #include "struct.h"
-#include "ezgl/graphics.hpp"
+#include "gtk4_types.hpp"
 
 
 class Global_Var {

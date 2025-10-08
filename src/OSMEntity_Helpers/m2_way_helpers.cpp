@@ -110,7 +110,7 @@ std::vector<way_info> create_vector_of_ways(std::unordered_map<OSMID, feature_da
                 LatLon node_position = current_node->coords();
                 double x_pos = lon_to_x(node_position.longitude());
                 double y_pos = lat_to_y(node_position.latitude());
-                ezgl::point2d current_point2d = ezgl::point2d(x_pos, y_pos);
+                Point2D current_point2d{x_pos, y_pos};
                 info.way_points2d.push_back(current_point2d);
             }
         }
@@ -174,7 +174,7 @@ void sortSubwayLines() {
                 for(int member_idx = 0; member_idx < subway_relation.members.size();member_idx++){
                     TypedOSMID osmId = subway_relation.members[member_idx];
                     if(osmId.type()==TypedOSMID::Way) {
-                        std::vector<ezgl::point2d> a_way;
+                        std::vector<Point2D> a_way;
                         //Do not need to draw the platform
                         if (subway_relation.relation_roles[member_idx] != "platform") {
                             const OSMWay *way = globals.id_to_way[osmId];
@@ -182,7 +182,7 @@ void sortSubwayLines() {
                             //loop through the nodes in the ways
                             for (const auto node: way_nodes) {
                                 const OSMNode *node_ptr = globals.node_to_id[node];
-                                ezgl::point2d loc = latlonTopoint(getNodeCoords(node_ptr));
+                                Point2D loc = latlonTopoint(getNodeCoords(node_ptr));
                                 a_way.push_back(loc);
                             }
                             subway_relation.subway_way.push_back(a_way);
@@ -208,7 +208,7 @@ void sortSubwayLines() {
     }
 }
 
-ezgl::color stringToRgb(std::string& colour_str){
+GdkRGBA stringToRgb(std::string& colour_str){
     int red;
     int blue;
     int green;
@@ -243,7 +243,8 @@ ezgl::color stringToRgb(std::string& colour_str){
         green = 0x8E;
         blue = 0x00;
     }
-    ezgl::color colour_rgb(red,green, blue);
+    // Convert 0-255 range to 0.0-1.0 range for GdkRGBA
+    GdkRGBA colour_rgb = {red / 255.0, green / 255.0, blue / 255.0, 1.0};
     return colour_rgb;
 }
 

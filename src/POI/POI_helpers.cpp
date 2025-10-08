@@ -45,7 +45,7 @@ std::pair<POI_class,POI_category> getCustomedPOIClass(POIIdx poiIdx){
     return poi_pair;
 }
 
-ezgl::point2d getPOILoc(POIIdx poiIdx){
+Point2D getPOILoc(POIIdx poiIdx){
     LatLon poi_latlon = getPOIPosition(poiIdx);
     // double poi_x = lon_to_x(poi_latlon.longitude());
     // double poi_y = lat_to_y(poi_latlon.latitude());
@@ -54,7 +54,7 @@ ezgl::point2d getPOILoc(POIIdx poiIdx){
    // std::cout<<"x: "<<poi_x<<"y: "<<poi_y<<std::endl;
     poi_x = lon_to_x(poi_x);
     poi_y = lat_to_y(poi_y);
-    ezgl::point2d poi_point2d(poi_x, poi_y);
+    Point2D poi_point2d{poi_x, poi_y};
 return poi_point2d;
 }
 

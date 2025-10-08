@@ -3,20 +3,20 @@
 #include "../globals.h"
 #include "../struct.h"
 #include "../ms1helpers.h"
-#include "../ezgl/camera.hpp"
+#include "../gtk4_types.hpp"
 
 #include <vector>
 #include <string>
 
 void sortPOI(){
     init_poi_vec();
-    ezgl::point2d increment(0,3);
+    Point2D increment{0,3};
     for (POIIdx poiIdx = 0; poiIdx < getNumPointsOfInterest(); ++poiIdx){
         //initialize the POI_info
         auto poi_pair = getCustomedPOIClass(poiIdx);
         std::string name = getPOIName(poiIdx);
-        ezgl::point2d position = getPOILoc(poiIdx);
-        ezgl::point2d text_pos = position + increment;
+        Point2D position = getPOILoc(poiIdx);
+        Point2D text_pos{position.x + increment.x, position.y + increment.y};
         POI_info poi_info(position,text_pos,name,poiIdx,poi_pair.first,poi_pair.second);
         std::string poi_type_str = getPOIType(poiIdx);
         poi_type_str.erase(std::remove(poi_type_str.begin(), poi_type_str.end(), ' '),poi_type_str.end());

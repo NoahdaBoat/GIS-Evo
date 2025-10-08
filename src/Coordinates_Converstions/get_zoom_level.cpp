@@ -4,14 +4,16 @@
 
 #include "coords_conversions.hpp"
 #include <iostream>
-#include "../ezgl/rectangle.hpp"
+#include "../gtk4_types.hpp"
 
-void get_current_zoom_level(double& x_zoom_prev, double& y_zoom_prev, int& current_zoom_level, ezgl::renderer *g) {
-    ezgl::rectangle current_zoom_rectangle = g->get_visible_world();
-//    std::cout << current_zoom_rectangle.m_first.x - current_zoom_rectangle.m_second.x << std::endl;
-//    std::cout << current_zoom_rectangle.m_second.y - current_zoom_rectangle.m_first.y << std::endl;
-    double x_zoom = (current_zoom_rectangle.m_first.x - current_zoom_rectangle.m_second.x);
-    double y_zoom = (current_zoom_rectangle.m_second.y - current_zoom_rectangle.m_first.y);
+void get_current_zoom_level(double& x_zoom_prev, double& y_zoom_prev, int& current_zoom_level, Rectangle visible_world) {
+    // TODO: GTK4 - Update to use Rectangle instead of renderer
+    (void)visible_world; // Suppress unused parameter warning
+    
+    // Original implementation calculated zoom from rectangle dimensions
+    // Need to adapt to use Rectangle visible_world directly
+    double x_zoom = (visible_world.x1 - visible_world.x2);
+    double y_zoom = (visible_world.y2 - visible_world.y1);
     double scale_factor_x = 0;
     double scale_factor_y = 0;
     bool first = false;

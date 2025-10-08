@@ -2,7 +2,7 @@
 
 #include "POI_setup.hpp"
 #include "../struct.h"
-#include "../ezgl/point.hpp"
+#include "../gtk4_types.hpp"
 
 
 
@@ -22,7 +22,7 @@
 std::pair<POI_class,POI_category> getCustomedPOIClass(POIIdx poiIdx);
 
 //returns the position of POI in x,y coord
-ezgl::point2d getPOILoc(POIIdx poiIdx);
+Point2D getPOILoc(POIIdx poiIdx);
 
 //convert string to POI_basic
 POI_basics getPOIBasic(std::string poi_type);

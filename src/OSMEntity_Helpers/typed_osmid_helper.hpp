@@ -4,11 +4,12 @@
 
 #pragma once
 
+#include <gtk/gtk.h>
 #include <vector>
 #include <string>
 #include "m1.h"
 #include "../ms1helpers.h"
-#include "../ezgl/graphics.hpp"
+#include "../gtk4_types.hpp"
 #include "OSMDatabaseAPI.h"
 
 
@@ -61,8 +62,8 @@ public:
 class subway_info:public each_relation{
 public:
     std::string colour;
-    std::vector<std::vector<ezgl::point2d>> subway_way;
-    ezgl::color draw_colour;
+    std::vector<std::vector<Point2D>> subway_way;
+    GdkRGBA draw_colour;
 };
 // Globals
 
@@ -93,7 +94,7 @@ std::unordered_map<OSMID, feature_data*> map_features_to_ways(std::vector<featur
 
 bool compare_ids(OSMID& way_id, feature_data& s1);
 
-void set_colour_of_feature(ezgl::color mycolour, FeatureType way_type);
+void set_colour_of_feature(GdkRGBA mycolour, FeatureType way_type);
 
 std::vector<each_relation> sort_osmrelations();
 
