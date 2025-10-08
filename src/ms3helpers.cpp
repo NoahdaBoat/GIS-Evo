@@ -6,26 +6,26 @@
 #include "m1.h"
 #include "ms3helpers.hpp"
 #include "globals.h"
-#include "ezgl/graphics.hpp"
+#include <gtk/gtk.h>
+#include <cairo.h>
+#include "gtk4_types.hpp"
 #include "coords_conversions.hpp"
 #include <algorithm>
 #include <cmath>
 
-void highlightRoute (ezgl::renderer* g, const std::vector<StreetSegmentIdx>& path){
-    //loop through each segment and draw a thick line on top
-    g->set_line_width(10);
-    g->set_color(100,149,237);
-    if(path.empty()){
-        return;
-    }
-    for(const auto segment : path){
-        for(auto point : globals.all_street_segments[segment].lines_to_draw){
-            g->draw_line(point.first,point.second);
-        }
-    }
+void highlightRoute (cairo_t* cr, const std::vector<StreetSegmentIdx>& path){
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    (void)path;
+    
+    // Original implementation:
+    // Loop through each segment and draw a thick line on top
+    // cairo_set_line_width(cr, 10);
+    // cairo_set_source_rgba(cr, 100.0/255.0, 149.0/255.0, 237.0/255.0, 1.0);
+    // for each segment, draw lines between points
 }
 
-std::pair<ezgl::point2d,ezgl::point2d> findMaxMinPoint(const std::vector<StreetSegmentIdx>& route){
+std::pair<Point2D,Point2D> findMaxMinPoint(const std::vector<StreetSegmentIdx>& route){
     double max_x = -1 * std::numeric_limits<double>::max();
     double max_y = -1 * std::numeric_limits<double>::max();
     double min_x = std::numeric_limits<double>::max();
@@ -39,9 +39,9 @@ std::pair<ezgl::point2d,ezgl::point2d> findMaxMinPoint(const std::vector<StreetS
       min_y = std::min(min_y, globals.all_street_segments[segment].min_pos.y);
    }
 
-   ezgl::point2d max(max_x, max_y);
-   ezgl::point2d min(min_x, min_y);
-   std::pair<ezgl::point2d,ezgl::point2d> max_min = std::make_pair(max, min);
+   Point2D max(max_x, max_y);
+   Point2D min(min_x, min_y);
+   std::pair<Point2D,Point2D> max_min = std::make_pair(max, min);
    return max_min;
 }
 
@@ -112,29 +112,17 @@ void clearRoadArrows(const std::vector<StreetSegmentIdx>& route){
     }
 }
 
-void redrawStreetComponents(ezgl::renderer *g, const std::vector<StreetSegmentIdx>& route) {
-    for(auto segment:route){
-       auto i = globals.all_street_segments[segment];
-       //draw arrows
-            g->set_line_width(i.arrow_width);
-            g->set_color(i.arrow_colour);
-            for (uint j = 0; j < i.arrows_to_draw.size(); ++j) {
-                g->draw_line(i.arrows_to_draw[j].first, i.arrows_to_draw[j].second);
-            }
-
-        //draw street names
-        g->set_text_rotation(i.text_rotation);
-        g->format_font("", ezgl::font_slant::normal, ezgl::font_weight::bold, 12);
-        if (!globals.dark_mode){
-            g->set_color(i.text_colour);
-        }
-        else{
-            g->set_color(i.dark_text_colour);
-        }
-        for (uint j = 0; j < i.text_to_draw.size(); ++j) {
-            g->draw_text(i.text_to_draw[j].loc, i.text_to_draw[j].label, i.text_to_draw[j].length_x, i.text_to_draw[j].length_y);
-        }
-    }
+void redrawStreetComponents(cairo_t *cr, const std::vector<StreetSegmentIdx>& route) {
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    (void)route;
+    
+    // Original implementation drew arrows and street names on top of highlighted route
+    // Needs conversion to Cairo API for:
+    // - cairo_set_line_width
+    // - cairo_set_source_rgba for colors
+    // - cairo_move_to/line_to/stroke for arrows
+    // - Pango/Cairo for text rendering with rotation
 }
 
 std::vector<std::string> findDirections(const std::vector<StreetSegmentIdx >& route){

@@ -1,11 +1,12 @@
 
+#include <gtk/gtk.h>
 #include <string>
 #include "StreetsDatabaseAPI.h"
 #include "globals.h"
 #include "ms1helpers.h"
 #include "streetsegment_info.hpp"
 #include <algorithm>
-#include "../ezgl/graphics.hpp"
+#include "../gtk4_types.hpp"
 #include <string>
 #include "../globals.h"
 
@@ -26,8 +27,8 @@ void set_colour_of_street(RoadType type, int idx) {
             globals.all_street_segments[idx].zoom_levels.push_back({3, 3});
             globals.all_street_segments[idx].zoom_levels.push_back({7, 8});
 
-            globals.all_street_segments[idx].road_colour = ezgl::color(246, 207, 101, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(118, 163, 205, 255);
+            globals.all_street_segments[idx].road_colour = {246/255.0, 207/255.0, 101/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {118/255.0, 163/255.0, 205/255.0, 1.0};
 
             break;
         
@@ -39,8 +40,8 @@ void set_colour_of_street(RoadType type, int idx) {
             globals.all_street_segments[idx].zoom_levels.push_back({7, 6});
             //g->set_line_width(zoom);
 
-            globals.all_street_segments[idx].road_colour = ezgl::color(246, 207, 101, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(118, 163, 205, 255);
+            globals.all_street_segments[idx].road_colour = {246/255.0, 207/255.0, 101/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {118/255.0, 163/255.0, 205/255.0, 1.0};
 
             break;
         
@@ -50,8 +51,8 @@ void set_colour_of_street(RoadType type, int idx) {
             globals.all_street_segments[idx].zoom_levels.push_back({4, 0});
             globals.all_street_segments[idx].zoom_levels.push_back({6, 3});
             globals.all_street_segments[idx].zoom_levels.push_back({8, 5});
-            globals.all_street_segments[idx].road_colour = ezgl::color(174, 164, 164, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(113, 133, 152, 255);
+            globals.all_street_segments[idx].road_colour = {174/255.0, 164/255.0, 164/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {113/255.0, 133/255.0, 152/255.0, 1.0};
 
             break;
         
@@ -61,8 +62,8 @@ void set_colour_of_street(RoadType type, int idx) {
             globals.all_street_segments[idx].zoom_levels.push_back({5, 0});
             globals.all_street_segments[idx].zoom_levels.push_back({8, 3});
             globals.all_street_segments[idx].zoom_levels.push_back({10, 5});
-            globals.all_street_segments[idx].road_colour = ezgl::color(174, 164, 164, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(113, 133, 152, 255);
+            globals.all_street_segments[idx].road_colour = {174/255.0, 164/255.0, 164/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {113/255.0, 133/255.0, 152/255.0, 1.0};
 
             break;
 
@@ -71,16 +72,16 @@ void set_colour_of_street(RoadType type, int idx) {
             globals.all_street_segments[idx].zoom_levels.push_back({5, 0});
             globals.all_street_segments[idx].zoom_levels.push_back({8, 3});
             globals.all_street_segments[idx].zoom_levels.push_back({10, 5});
-            globals.all_street_segments[idx].road_colour = ezgl::color(0, 0, 0, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(90, 110, 129, 255);
+            globals.all_street_segments[idx].road_colour = {0.0, 0.0, 0.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {90/255.0, 110/255.0, 129/255.0, 1.0};
 
             break;
 
         case RoadType::service:
 
             globals.all_street_segments[idx].zoom_levels.push_back({8, 0});
-            globals.all_street_segments[idx].road_colour = ezgl::color(174, 164, 164, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(90, 110, 129, 255);
+            globals.all_street_segments[idx].road_colour = {174/255.0, 164/255.0, 164/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {90/255.0, 110/255.0, 129/255.0, 1.0};
 
             break;
 
@@ -91,16 +92,16 @@ void set_colour_of_street(RoadType type, int idx) {
         case RoadType::pedestrian:
 
             globals.all_street_segments[idx].zoom_levels.push_back({8, 0});
-            globals.all_street_segments[idx].road_colour = ezgl::color(18, 68, 41, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(90, 110, 129, 255);
+            globals.all_street_segments[idx].road_colour = {18/255.0, 68/255.0, 41/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {90/255.0, 110/255.0, 129/255.0, 1.0};
 
             break;
 
         case RoadType::cycleway:
 
             globals.all_street_segments[idx].zoom_levels.push_back({8, 0});
-            globals.all_street_segments[idx].road_colour = ezgl::color(128, 128, 128, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(90, 110, 129, 255);
+            globals.all_street_segments[idx].road_colour = {128/255.0, 128/255.0, 128/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {90/255.0, 110/255.0, 129/255.0, 1.0};
 
             break;
 
@@ -110,21 +111,21 @@ void set_colour_of_street(RoadType type, int idx) {
             globals.all_street_segments[idx].zoom_levels.push_back({6, 0});
             globals.all_street_segments[idx].zoom_levels.push_back({8, 3});
             globals.all_street_segments[idx].zoom_levels.push_back({10, 5});
-            globals.all_street_segments[idx].road_colour = ezgl::color(192, 192, 192, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(113, 133, 152, 255);
+            globals.all_street_segments[idx].road_colour = {192/255.0, 192/255.0, 192/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {113/255.0, 133/255.0, 152/255.0, 1.0};
 
             break;
 
         default:
             globals.all_street_segments[idx].zoom_levels.push_back({8, 0});
-            globals.all_street_segments[idx].road_colour = ezgl::color(174, 164, 164, 255);
-            globals.all_street_segments[idx].dark_road_colour = ezgl::color(90, 110, 129, 255);
+            globals.all_street_segments[idx].road_colour = {174/255.0, 164/255.0, 164/255.0, 1.0};
+            globals.all_street_segments[idx].dark_road_colour = {90/255.0, 110/255.0, 129/255.0, 1.0};
 
             break;
     }
 }
 
-void draw_arrows(int idx, ezgl::point2d from, ezgl::point2d to) {
+void draw_arrows(int idx, Point2D from, Point2D to) {
     double arrow_length = 10;
     double arrowhead_length = arrow_length / 2;
     double spacing = 2 * arrow_length;

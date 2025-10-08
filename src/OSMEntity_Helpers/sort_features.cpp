@@ -2,6 +2,7 @@
 // Created by montinoa on 2/28/24.
 //
 
+#include <gtk/gtk.h>
 #include <vector>
 #include <unordered_map>
 #include <fstream>
@@ -10,8 +11,7 @@
 #include "../Coordinates_Converstions/coords_conversions.hpp"
 #include "/cad2/ece297s/public/include/streetsdatabase/StreetsDatabaseAPI.h"
 #include "/cad2/ece297s/public/include/streetsdatabase/OSMDatabaseAPI.h"
-#include "../ezgl/color.hpp"
-#include "../ezgl/graphics.hpp"
+#include "../gtk4_types.hpp"
 #include "../globals.h"
 
 #define MAP_STEPS 8
@@ -64,7 +64,7 @@ void sort_features() {
                 }
                 double x_pos = lon_to_x(node_pos.longitude());
                 double y_pos = lat_to_y(node_pos.latitude());
-                ezgl::point2d current_point2d = ezgl::point2d(x_pos, y_pos);
+                Point2D current_point2d{x_pos, y_pos};
                 info.points.push_back(current_point2d);
             }
             info.y_max = lat_to_y(max_x);
@@ -76,78 +76,78 @@ void sort_features() {
 
             switch (getFeatureType(i)) {
                 case FeatureType::PARK :
-                    info.mycolour = ezgl::color(184, 244, 204, 255);
-                    info.dark_colour = ezgl::color(60, 104, 99, 255);
+                    info.mycolour = {184/255.0, 244/255.0, 204/255.0, 1.0};
+                    info.dark_colour = {60/255.0, 104/255.0, 99/255.0, 1.0};
                     info.zoom_lod = 2;
                     park.push_back(info);
                     break;
 
                 case FeatureType::BUILDING :
-                    info.mycolour = ezgl::color(213, 216, 219, 255);
-                    info.dark_colour = ezgl::color(72, 94, 115, 225);
+                    info.mycolour = {213/255.0, 216/255.0, 219/255.0, 1.0};
+                    info.dark_colour = {72/255.0, 94/255.0, 115/255.0, 225/255.0};
                     info.zoom_lod = 7;
                     building.push_back(info);
                     break;
 
                 case FeatureType::BEACH :
-                    info.mycolour = ezgl::color(245, 236, 211, 255);
-                    info.dark_colour = ezgl::color(102, 126, 137, 255);
+                    info.mycolour = {245/255.0, 236/255.0, 211/255.0, 1.0};
+                    info.dark_colour = {102/255.0, 126/255.0, 137/255.0, 1.0};
                     info.zoom_lod = 3;
                     beach.push_back(info);
                     break;
 
                 case FeatureType::GLACIER :
-                    info.mycolour = ezgl::color(232, 232, 232, 255);
-                    info.dark_colour = ezgl::color(112, 129, 147, 255);
+                    info.mycolour = {232/255.0, 232/255.0, 232/255.0, 1.0};
+                    info.dark_colour = {112/255.0, 129/255.0, 147/255.0, 1.0};
                     info.zoom_lod = 2;
                     glacier.push_back(info);
                     break;
 
                 case FeatureType::GOLFCOURSE :
-                    info.mycolour = ezgl::color(96, 191, 138, 255);
-                    info.dark_colour = ezgl::color(34, 82, 77, 255);
+                    info.mycolour = {96/255.0, 191/255.0, 138/255.0, 1.0};
+                    info.dark_colour = {34/255.0, 82/255.0, 77/255.0, 1.0};
                     info.zoom_lod = 3;
                     golfcourse.push_back(info);
                     break;
 
                 case FeatureType::GREENSPACE :
-                    info.mycolour = ezgl::color(184, 244, 204, 255);
-                    info.dark_colour = ezgl::color(60, 104, 99, 255);
+                    info.mycolour = {184/255.0, 244/255.0, 204/255.0, 1.0};
+                    info.dark_colour = {60/255.0, 104/255.0, 99/255.0, 1.0};
                     info.zoom_lod = 0;
                     greenspace.push_back(info);
                     break;
 
                 case FeatureType::ISLAND :
-                    info.mycolour = ezgl::color(153, 228, 186, 255);
-                    info.dark_colour = ezgl::color(44, 93, 88, 255);
+                    info.mycolour = {153/255.0, 228/255.0, 186/255.0, 1.0};
+                    info.dark_colour = {44/255.0, 93/255.0, 88/255.0, 1.0};
                     info.zoom_lod = -1;
                     island.push_back(info);
                     break;
 
                 case FeatureType::LAKE :
-                    info.mycolour = ezgl::color(130, 216, 245, 255);
-                    info.dark_colour = ezgl::color(2, 14, 28, 255);
+                    info.mycolour = {130/255.0, 216/255.0, 245/255.0, 1.0};
+                    info.dark_colour = {2/255.0, 14/255.0, 28/255.0, 1.0};
                     info.zoom_lod = -5;
                     lake.push_back(info);
                     break;
 
                 case FeatureType::RIVER :
-                    info.mycolour = ezgl::color(130, 216, 245, 255);
-                    info.dark_colour = ezgl::color(2, 14, 28, 255);
+                    info.mycolour = {130/255.0, 216/255.0, 245/255.0, 1.0};
+                    info.dark_colour = {2/255.0, 14/255.0, 28/255.0, 1.0};
                     info.zoom_lod = -1;
                     river.push_back(info);
                     break;
 
                 case FeatureType::STREAM :
-                    info.mycolour = ezgl::color(130, 216, 245, 255);
-                    info.dark_colour = ezgl::color(2, 14, 28, 255);
+                    info.mycolour = {130/255.0, 216/255.0, 245/255.0, 1.0};
+                    info.dark_colour = {2/255.0, 14/255.0, 28/255.0, 1.0};
                     info.zoom_lod = 1;
                     stream.push_back(info);
                     break;
 
                 case FeatureType::UNKNOWN :
-                    info.mycolour = ezgl::color(232, 232, 232, 255);
-                    info.dark_colour = ezgl::color(68, 81, 93, 255);
+                    info.mycolour = {232/255.0, 232/255.0, 232/255.0, 1.0};
+                    info.dark_colour = {68/255.0, 81/255.0, 93/255.0, 1.0};
                     info.zoom_lod = 4;
                     unknown.push_back(info);
                     break;

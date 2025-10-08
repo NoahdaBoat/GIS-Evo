@@ -3,4 +3,5 @@ project('gis-evo', 'cpp',
   default_options: ['warning_level=2', 'cpp_std=c++20'])
 
 subdir('gtk4_app')
+subdir('src')
 subdir('tools/osm_converter')

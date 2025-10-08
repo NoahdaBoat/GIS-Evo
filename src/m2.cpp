@@ -19,9 +19,9 @@
  * SOFTWARE.
  */
 
-#include "ezgl/application.hpp"
-#include "ezgl/graphics.hpp"
-#include "ezgl/canvas.hpp"
+#include <gtk/gtk.h>
+#include <cairo.h>
+#include "gtk4_types.hpp"
 #include "ms1helpers.h"
 #include "ms2helpers.hpp"
 #include "ms3helpers.hpp"
@@ -46,6 +46,7 @@
 #include <deque>
 #include <chrono>
 #include <thread>
+#include <numbers>
 
 #define VISUALIZE
 
@@ -57,6 +58,48 @@
 // and call closeMap() after this function returns.
 
 
+// Global view state for pan/zoom
+struct ViewState {
+    double offset_x = 0.0;
+    double offset_y = 0.0;
+    double zoom = 1.0;
+    int canvas_width = 0;
+    int canvas_height = 0;
+    Rectangle visible_world{0, 0, 0, 0};
+    GtkWidget *drawing_area = nullptr;  // For triggering redraws
+};
+
+ViewState g_view_state;
+
+// Helper functions for coordinate transformations
+Point2D screen_to_world(Point2D screen) {
+    double world_x = (screen.x - g_view_state.canvas_width/2.0 - g_view_state.offset_x) / g_view_state.zoom;
+    double world_y = (screen.y - g_view_state.canvas_height/2.0 - g_view_state.offset_y) / g_view_state.zoom;
+    return Point2D{world_x, world_y};
+}
+
+Point2D world_to_screen(Point2D world) {
+    double screen_x = world.x * g_view_state.zoom + g_view_state.canvas_width/2.0 + g_view_state.offset_x;
+    double screen_y = world.y * g_view_state.zoom + g_view_state.canvas_height/2.0 + g_view_state.offset_y;
+    return Point2D{screen_x, screen_y};
+}
+
+void calculate_visible_world() {
+    // Calculate world coordinates visible in the current view
+    Point2D top_left = screen_to_world(Point2D{0, 0});
+    Point2D bottom_right = screen_to_world(Point2D{
+        static_cast<double>(g_view_state.canvas_width),
+        static_cast<double>(g_view_state.canvas_height)
+    });
+    
+    g_view_state.visible_world = Rectangle{
+        top_left.x,
+        top_left.y,
+        bottom_right.x,
+        bottom_right.y
+    };
+}
+
 // local globals
 std::vector<way_info> m2_local_all_ways_info;
 std::vector<feature_data> m2_local_all_features_info;
@@ -67,9 +110,9 @@ std::vector<RoadType> m2_local_all_street_types;
 std::vector<each_relation> m2_local_all_relations_vector;
 std::vector<feature_info> closed_features;
 std::vector<feature_info> open_features;
-std::pair<IntersectionIdx, ezgl::point2d> clicked_intersection;
-std::pair<IntersectionIdx, ezgl::point2d> origin_intersection;
-std::pair<IntersectionIdx, ezgl::point2d> destination_intersection;
+std::pair<IntersectionIdx, Point2D> clicked_intersection;
+std::pair<IntersectionIdx, Point2D> origin_intersection;
+std::pair<IntersectionIdx, Point2D> destination_intersection;
 std::unordered_set<IntersectionIdx> highlighted_intersections;
 std::vector<StreetSegmentIdx> highlighted_route;
 int draw_index = 0;
@@ -78,18 +121,21 @@ int current_zoom_level = 0;
 double x_zoom_prev, y_zoom_prev;
 bool valid_input = false;
 StreetSegmentIdx street_to_highlight = -1;
-ezgl::application* global_access;
+GtkApplication* global_access;
 bool search_route = false;
 bool set_origin = true;
 
 
-void clearAllHighlights(ezgl::application* application) {
+void clearAllHighlights(GtkApplication* application) {
 
     for (int i = 0; i < getNumIntersections(); ++i) {
         intersection_info& info = globals.all_intersections[i];
         info.highlight = false;
     }
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
     highlighted_intersections.clear();
 }
 
@@ -196,7 +242,7 @@ std::vector<std::pair<IntersectionIdx, std::string>> getSearchedIntersections(Gt
 }
 
 
-void searchEntryEnter(GtkEntry* search_bar, ezgl::application* application) {
+void searchEntryEnter(GtkEntry* search_bar, GtkApplication* application) {
 
     if (!valid_input){
         std::string message = "Invalid Intersection";
@@ -229,7 +275,10 @@ void searchEntryEnter(GtkEntry* search_bar, ezgl::application* application) {
             globals.all_intersections[destination_intersection.first].highlight = true;
             outputRoad(application);
         }
-        application->refresh_drawing();
+        
+        if (g_view_state.drawing_area) {
+            gtk_widget_queue_draw(g_view_state.drawing_area);
+        }
     }
 
     // user pressed enter and not in search_route mode
@@ -252,13 +301,15 @@ void searchEntryEnter(GtkEntry* search_bar, ezgl::application* application) {
             message += "                 No intersection                 ";
         }
 
-        application->refresh_drawing();
+        if (g_view_state.drawing_area) {
+            gtk_widget_queue_draw(g_view_state.drawing_area);
+        }
 
         application->create_popup_message("Intersection(s) Information", message.c_str());
     }
 }
 
-void searchEntryType(GtkEntry* search_bar, ezgl::application* application) {
+void searchEntryType(GtkEntry* search_bar, GtkApplication* application) {
 
     // load data into list_store
     GtkListStore* list_store = GTK_LIST_STORE(application->get_object("ListStore"));
@@ -296,12 +347,15 @@ void searchEntryType(GtkEntry* search_bar, ezgl::application* application) {
     }
 }
 
-void zoomFit(GtkEntry* /*zoom_fit_button*/, ezgl::application* application) {
+void zoomFit(GtkEntry* /*zoom_fit_button*/, GtkApplication* application) {
     current_zoom_level = 1;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
-void change_map(GtkEntry* city_maps, ezgl::application* application) {
+void change_map(GtkEntry* city_maps, GtkApplication* application) {
     GtkComboBoxText* list_cities = GTK_COMBO_BOX_TEXT(city_maps);
     gchar* selected_city = gtk_combo_box_text_get_active_text(list_cities);
     std::string new_city = selected_city;
@@ -309,39 +363,48 @@ void change_map(GtkEntry* city_maps, ezgl::application* application) {
     loadNewMap(new_city, application);
 }
 
-void draw_ent(GtkEntry* /*ent_buttom*/, ezgl::application* application) {
+void draw_ent(GtkEntry* /*ent_buttom*/, GtkApplication* application) {
     if(globals.draw_which_poi[NUM_POI_class+1]) {
         setAllBool(false);
     }
         globals.draw_which_poi[entertainment] = !globals.draw_which_poi[entertainment] ;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
-void draw_trans(GtkEntry* /*trans_buttom*/, ezgl::application* application) {
+void draw_trans(GtkEntry* /*trans_buttom*/, GtkApplication* application) {
     if(globals.draw_which_poi[NUM_POI_class+1]) {
         setAllBool(false);
     }
     globals.draw_which_poi[station] = !globals.draw_which_poi[station] ;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
-void draw_basic(GtkEntry* /*basic_buttom*/, ezgl::application* application) {
+void draw_basic(GtkEntry* /*basic_buttom*/, GtkApplication* application) {
     if(globals.draw_which_poi[NUM_POI_class+1]) {
         setAllBool(false);
     }
     globals.draw_which_poi[basic] = !globals.draw_which_poi[basic] ;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
-void darkMode(GtkEntry* /*dark_mode_button*/, ezgl::application* application) {
+void darkMode(GtkEntry* /*dark_mode_button*/, GtkApplication* application) {
    globals.dark_mode = !globals.dark_mode;
-   application->refresh_drawing();
-    // draw_path = true;
-    // draw_index+=10;
-    application->refresh_drawing();
+   
+   if (g_view_state.drawing_area) {
+       gtk_widget_queue_draw(g_view_state.drawing_area);
+   }
 }
 
-void aboutButton(GtkWidget* /*About menu button*/, ezgl::application* application) {
+void aboutButton(GtkWidget* /*About menu button*/, GtkApplication* application) {
     std::string message;
 
     message += std::string("Created by: ") + "\n";
@@ -352,7 +415,7 @@ void aboutButton(GtkWidget* /*About menu button*/, ezgl::application* applicatio
     application->create_popup_message("About", message.c_str());
 }
 
-void helpButton(GtkWidget* /*Help button */, ezgl::application* application) {
+void helpButton(GtkWidget* /*Help button */, GtkApplication* application) {
     std::string message;
 
     message += std::string("Information about this application: ") + "\n" + "\n";
@@ -363,7 +426,7 @@ void helpButton(GtkWidget* /*Help button */, ezgl::application* application) {
 
 }
 
-void outputRoad(ezgl::application* application) {
+void outputRoad(GtkApplication* application) {
     highlighted_route.clear();
     highlighted_route = findPathBetweenIntersections(15, std::make_pair(origin_intersection.first, destination_intersection.first));
 
@@ -528,10 +591,13 @@ void outputRoad(ezgl::application* application) {
 
     h->set_visible_world(zoom);
     drawRoadArrows(highlighted_route,current_zoom_level,origin_intersection.first);
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
-void dialogInput(GtkWidget* dialog ,ezgl::application* /*application*/, gpointer input){
+void dialogInput(GtkWidget* dialog ,GtkApplication* /*application*/, gpointer input){
     gint response = GPOINTER_TO_INT(input);
     if(response == GTK_RESPONSE_ACCEPT){
         gtk_widget_destroy(dialog);
@@ -540,15 +606,16 @@ void dialogInput(GtkWidget* dialog ,ezgl::application* /*application*/, gpointer
    }
 }
 
-void searchRouteToggle(GtkToggleButton* search_route_toggle, ezgl::application* application){
+void searchRouteToggle(GtkToggleButton* search_route_toggle, GtkApplication* application){
     search_route = gtk_toggle_button_get_active(search_route_toggle);
     clearAllHighlights(application);
 }
 
 
-void initial_setup(ezgl::application *application, bool /*new_window*/) {
-    application->update_message("Team 20 - ECE297");
-
+void initial_setup(GtkApplication *application, bool /*new_window*/) {
+    // Note: This function is for legacy EZGL compatibility
+    // The new GTK4 application uses on_activate() instead
+    
     #ifdef VISUALIZE
     global_access = application;
     #endif
@@ -557,7 +624,6 @@ void initial_setup(ezgl::application *application, bool /*new_window*/) {
     // increment row each time we insert a new element.
     int row = 6;
     application->create_popup_message("Complete", "All Items Drawn");
-    application->update_message(std::to_string(current_zoom_level));
     ++row;
 
     // connect widges to callbacks
@@ -599,7 +665,7 @@ void initial_setup(ezgl::application *application, bool /*new_window*/) {
 
 
 
-void actOnMouseClick(ezgl::application* application, GdkEventButton* event, double x, double y) {
+void actOnMouseClick(GtkApplication* application, GdkEventButton* event, double x, double y) {
 
     // save previous state of origin_intersection
     bool origin_highlighted = globals.all_intersections[origin_intersection.first].highlight;
@@ -721,48 +787,241 @@ void actOnMouseClick(ezgl::application* application, GdkEventButton* event, doub
         application->create_popup_message(title, message2.c_str());
     }
 
-    application->refresh_drawing();
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
+
+
+// Forward declarations for callbacks
+static void on_activate(GtkApplication *app, gpointer user_data);
+static void draw_callback(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data);
+static void drag_begin_callback(GtkGestureDrag *gesture, double start_x, double start_y, gpointer user_data);
+static void drag_update_callback(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data);
+static gboolean scroll_callback(GtkEventControllerScroll *controller, double dx, double dy, gpointer user_data);
+static gboolean key_press_callback(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data);
 
 
 // Main function, called from main.cpp
 void drawMap() {
-    ezgl::application::settings settings;
-    settings.main_ui_resource = "libstreetmap/resources/main.ui";
-    settings.window_identifier = "MainWindow";
-    settings.canvas_identifier = "MainCanvas";
-    ezgl::application application(settings);
-    ezgl::rectangle initial_world({lon_to_x(globals.min_lon), lat_to_y(globals.min_lat)}, {lon_to_x(globals.max_lon), lat_to_y(globals.max_lat)});
+    // Create GTK4 application
+    GtkApplication *app = gtk_application_new("com.noahboat.gisevo.mapper", G_APPLICATION_FLAGS_NONE);
+    
+    // Connect activation callback
+    g_signal_connect(app, "activate", G_CALLBACK(on_activate), nullptr);
+    
+    // Run application event loop (this blocks until window closes)
+    int status = g_application_run(G_APPLICATION(app), 0, nullptr);
+    
+    // Cleanup
+    g_object_unref(app);
+}
 
-    application.add_canvas("MainCanvas", draw_main_canvas, initial_world);
+// Application activation callback - creates main window
+static void on_activate(GtkApplication *app, gpointer user_data) {
+    // Create application window
+    GtkWidget *window = gtk_application_window_new(app);
+    gtk_window_set_title(GTK_WINDOW(window), "GIS Evo - Map Navigator");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1200, 900);
+    
+    // Create drawing area for Cairo rendering
+    g_view_state.drawing_area = gtk_drawing_area_new();
+    gtk_widget_set_hexpand(g_view_state.drawing_area, TRUE);
+    gtk_widget_set_vexpand(g_view_state.drawing_area, TRUE);
+    
+    // Set up Cairo draw callback
+    gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(g_view_state.drawing_area),
+                                    draw_callback, nullptr, nullptr);
+    
+    // Add drag gesture controller for panning
+    GtkGesture *drag = gtk_gesture_drag_new();
+    gtk_widget_add_controller(g_view_state.drawing_area, GTK_EVENT_CONTROLLER(drag));
+    g_signal_connect(drag, "drag-begin", G_CALLBACK(drag_begin_callback), nullptr);
+    g_signal_connect(drag, "drag-update", G_CALLBACK(drag_update_callback), nullptr);
+    
+    // Add scroll controller for zooming
+    GtkEventController *scroll = gtk_event_controller_scroll_new(
+        GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
+    gtk_widget_add_controller(g_view_state.drawing_area, scroll);
+    g_signal_connect(scroll, "scroll", G_CALLBACK(scroll_callback), nullptr);
+    
+    // Add keyboard controller
+    GtkEventController *key = gtk_event_controller_key_new();
+    gtk_widget_add_controller(g_view_state.drawing_area, key);
+    g_signal_connect(key, "key-pressed", G_CALLBACK(key_press_callback), nullptr);
+    
+    // Set window content and show
+    gtk_window_set_child(GTK_WINDOW(window), g_view_state.drawing_area);
+    gtk_widget_grab_focus(g_view_state.drawing_area);
+    gtk_window_present(GTK_WINDOW(window));
+    
+    std::cout << "GIS Evo Map Navigator initialized successfully!" << std::endl;
+    std::cout << "Controls:" << std::endl;
+    std::cout << "  - Drag to pan" << std::endl;
+    std::cout << "  - Scroll to zoom" << std::endl;
+    std::cout << "  - Press 'd' to toggle dark mode" << std::endl;
+}
 
-    application.run(initial_setup, actOnMouseClick, nullptr, nullptr);
+// Cairo drawing callback
+static void draw_callback(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
+    // Update canvas dimensions
+    g_view_state.canvas_width = width;
+    g_view_state.canvas_height = height;
+    
+    // Delegate to main canvas drawing function
+    draw_main_canvas(cr, width, height);
+}
+
+// Drag gesture callbacks for panning
+static double drag_start_offset_x = 0.0;
+static double drag_start_offset_y = 0.0;
+
+static void drag_begin_callback(GtkGestureDrag *gesture, double start_x, double start_y, gpointer user_data) {
+    drag_start_offset_x = g_view_state.offset_x;
+    drag_start_offset_y = g_view_state.offset_y;
+}
+
+static void drag_update_callback(GtkGestureDrag *gesture, double offset_x, double offset_y, gpointer user_data) {
+    g_view_state.offset_x = drag_start_offset_x + offset_x;
+    g_view_state.offset_y = drag_start_offset_y + offset_y;
+    
+    // Trigger redraw
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
+}
+
+// Scroll callback for zooming
+static gboolean scroll_callback(GtkEventControllerScroll *controller, double dx, double dy, gpointer user_data) {
+    // Zoom in/out based on scroll direction
+    double zoom_factor = 1.1;
+    if (dy < 0) {
+        // Scroll up - zoom in
+        g_view_state.zoom *= zoom_factor;
+    } else {
+        // Scroll down - zoom out
+        g_view_state.zoom /= zoom_factor;
+    }
+    
+    // Clamp zoom to reasonable range
+    if (g_view_state.zoom < 0.1) g_view_state.zoom = 0.1;
+    if (g_view_state.zoom > 100.0) g_view_state.zoom = 100.0;
+    
+    // Trigger redraw
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
+    
+    return TRUE;  // Event handled
+}
+
+// Keyboard callback
+static gboolean key_press_callback(GtkEventControllerKey *controller, guint keyval, guint keycode, 
+                                   GdkModifierType state, gpointer user_data) {
+    switch (keyval) {
+        case GDK_KEY_d:
+        case GDK_KEY_D:
+            // Toggle dark mode
+            globals.dark_mode = !globals.dark_mode;
+            if (g_view_state.drawing_area) {
+                gtk_widget_queue_draw(g_view_state.drawing_area);
+            }
+            std::cout << "Dark mode: " << (globals.dark_mode ? "ON" : "OFF") << std::endl;
+            return TRUE;
+            
+        case GDK_KEY_plus:
+        case GDK_KEY_equal:
+            // Zoom in
+            g_view_state.zoom *= 1.2;
+            if (g_view_state.drawing_area) {
+                gtk_widget_queue_draw(g_view_state.drawing_area);
+            }
+            return TRUE;
+            
+        case GDK_KEY_minus:
+        case GDK_KEY_underscore:
+            // Zoom out
+            g_view_state.zoom /= 1.2;
+            if (g_view_state.drawing_area) {
+                gtk_widget_queue_draw(g_view_state.drawing_area);
+            }
+            return TRUE;
+            
+        case GDK_KEY_c:
+        case GDK_KEY_C:
+            // Clear selections
+            highlighted_intersections.clear();
+            highlighted_route.clear();
+            clicked_intersection = {-1, Point2D{0, 0}};
+            origin_intersection = {-1, Point2D{0, 0}};
+            destination_intersection = {-1, Point2D{0, 0}};
+            if (g_view_state.drawing_area) {
+                gtk_widget_queue_draw(g_view_state.drawing_area);
+            }
+            std::cout << "Selections cleared" << std::endl;
+            return TRUE;
+    }
+    
+    return FALSE;  // Event not handled
 }
 
 
 
-void draw_main_canvas(ezgl::renderer *g) {
-    if (globals.dark_mode){
-        ezgl::rectangle visible_world = g->get_visible_world();
-        g->set_color(53, 59, 66, 255);
-        g->fill_rectangle(visible_world);
+void draw_main_canvas(cairo_t *cr, int width, int height) {
+    // Save Cairo state
+    cairo_save(cr);
+    
+    // Clear background based on dark mode
+    if (globals.dark_mode) {
+        cairo_set_source_rgb(cr, 53.0/255.0, 59.0/255.0, 66.0/255.0);  // Dark gray
+    } else {
+        cairo_set_source_rgb(cr, 0.95, 0.95, 0.95);  // Light gray
     }
-
-    get_current_zoom_level(x_zoom_prev, y_zoom_prev, current_zoom_level, g);
-
-    draw_features(g);
-
-    way_draw_features(g);
-
-    drawStreets(g);
-
-    highlightRoute(g,highlighted_route);
-
-    redrawStreetComponents(g,highlighted_route);
-
-    drawHighlightedIntersections(g);
-
-    drawPOIPng(g);
+    cairo_paint(cr);
+    
+    // Calculate visible world coordinates
+    calculate_visible_world();
+    
+    // Apply pan and zoom transformations
+    cairo_translate(cr, width / 2.0 + g_view_state.offset_x, height / 2.0 + g_view_state.offset_y);
+    cairo_scale(cr, g_view_state.zoom, g_view_state.zoom);
+    
+    // Update current zoom level for feature filtering
+    // TODO: Implement proper zoom level calculation
+    // get_current_zoom_level(x_zoom_prev, y_zoom_prev, current_zoom_level, g_view_state.visible_world);
+    
+    // Draw in order (back to front)
+    // TODO: Implement these drawing functions
+    // draw_features(cr);              // Draw map features (parks, buildings, water)
+    // way_draw_features(cr);          // Draw OSM way features
+    // drawStreets(cr);                // Draw street network
+    // highlightRoute(cr, highlighted_route);  // Highlight selected route
+    // redrawStreetComponents(cr, highlighted_route);  // Street names and arrows
+    // drawHighlightedIntersections(cr);  // Draw selected intersections
+    // drawPOIPng(cr);                 // Draw points of interest
+    
+    // For now, draw a simple test pattern
+    cairo_set_line_width(cr, 2.0 / g_view_state.zoom);
+    
+    // Draw coordinate axes for reference
+    cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);  // Red X axis
+    cairo_move_to(cr, -10000, 0);
+    cairo_line_to(cr, 10000, 0);
+    cairo_stroke(cr);
+    
+    cairo_set_source_rgb(cr, 0.0, 1.0, 0.0);  // Green Y axis
+    cairo_move_to(cr, 0, -10000);
+    cairo_line_to(cr, 0, 10000);
+    cairo_stroke(cr);
+    
+    // Draw a test circle at origin
+    cairo_set_source_rgb(cr, 0.0, 0.0, 1.0);  // Blue
+    cairo_arc(cr, 0, 0, 100 / g_view_state.zoom, 0, 2 * std::numbers::pi);
+    cairo_fill(cr);
+    
+    // Restore Cairo state
+    cairo_restore(cr);
+}
 
     std::vector<DeliveryInf> deliveries;
     std::vector<IntersectionIdx> depots;
@@ -814,7 +1073,12 @@ void draw_main_canvas(ezgl::renderer *g) {
 
 }
 
-void drawHighlightedIntersections(ezgl::renderer* g){
+void drawHighlightedIntersections(cairo_t* cr){
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    
+    // Original implementation needs to be converted from EZGL to Cairo API
+}
     for (int i = 0; i < getNumIntersections(); ++i) {
 
         intersection_info info = globals.all_intersections[i];
@@ -826,7 +1090,12 @@ void drawHighlightedIntersections(ezgl::renderer* g){
 }
 
 
-void drawStreets(ezgl::renderer* g) {
+void drawStreets(cairo_t* cr) {
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    
+    // Original implementation needs significant rework for Cairo API
+}
     g->set_line_width(1);
     g->set_line_cap(ezgl::line_cap::butt); // butt ends
     g->set_line_dash(ezgl::line_dash::none); // solid line
@@ -894,7 +1163,12 @@ void drawStreets(ezgl::renderer* g) {
 
 
 
-void draw_features(ezgl::renderer *g) {
+void draw_features(cairo_t *cr) {
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    
+    // Original implementation needs conversion from EZGL to Cairo
+}
     int count = 0;
     int count2 = 0;
     ezgl::rectangle current_zoom_rectangle = g->get_visible_world();
@@ -926,7 +1200,12 @@ void draw_features(ezgl::renderer *g) {
 }
 
 
-void way_draw_features(ezgl::renderer *g) {
+void way_draw_features(cairo_t *cr) {
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    
+    // Original implementation needs conversion
+}
     g->set_line_width(1);
     for (auto i : m2_local_all_ways_info) {
 
@@ -940,7 +1219,12 @@ void way_draw_features(ezgl::renderer *g) {
 }
 
 
-void drawPOIPng(ezgl::renderer *g) {
+void drawPOIPng(cairo_t *cr) {
+    // TODO: GTK4 - Convert EZGL drawing calls to Cairo
+    (void)cr; // Suppress unused parameter warning
+    
+    // Original implementation needs conversion to Cairo for PNG rendering
+}
     double png_scale_zoomin = 0.004 * current_zoom_level;
     double png_scale = 0.006 * current_zoom_level;
     double text_scale = 1.5 * current_zoom_level;
@@ -1090,7 +1374,7 @@ void drawPOIPng(ezgl::renderer *g) {
     }
 }
 
-void loadNewMap(const std::string& new_city,ezgl::application* application) {
+void loadNewMap(const std::string& new_city,GtkApplication* application) {
     std::string new_map_path;
 
     for( const auto& outer : globals.map_names) {
@@ -1109,9 +1393,10 @@ void loadNewMap(const std::string& new_city,ezgl::application* application) {
     double min_y = lat_to_y(globals.min_lat);
     double max_x = lon_to_x(globals.max_lon);
     double min_x = lon_to_x(globals.min_lon);
-    ezgl::point2d max_coord(max_x, max_y);
-    ezgl::point2d min_coord(min_x, min_y);
-    ezgl::rectangle new_coord(min_coord, max_coord);
-    application->change_canvas_world_coordinates("MainCanvas", new_coord);
-    application->refresh_drawing();
+    Point2D max_coord(max_x, max_y);
+    Point2D min_coord(min_x, min_y);
+    Rectangle new_coord(min_coord.x, min_coord.y, max_coord.x, max_coord.y);
+    // TODO: GTK4 - Need to implement canvas coordinate change
+    // application->change_canvas_world_coordinates("MainCanvas", new_coord);
+    // application->refresh_drawing();
 }

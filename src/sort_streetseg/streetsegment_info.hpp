@@ -1,9 +1,10 @@
 #pragma once
 
+#include <gtk/gtk.h>
 #include <vector>
 #include <string>
 #include <unordered_map>
-#include "ezgl/graphics.hpp"
+#include "../gtk4_types.hpp"
 #include "OSMDatabaseAPI.h"
 
 enum RoadType {
@@ -33,7 +34,7 @@ enum RoadType {
 };
 
 struct text_prop {
-    ezgl::point2d loc;
+    Point2D loc;
     std::string label;
     double length_x;
     double length_y;
@@ -45,8 +46,8 @@ struct street_segment_info {
     std::string inter_to;
     std::string inter_from;
     int num_curve_point;
-    ezgl::point2d max_pos;
-    ezgl::point2d min_pos;
+    Point2D max_pos;
+    Point2D min_pos;
     StreetSegmentIdx index;
     IntersectionIdx to;
     IntersectionIdx from;
@@ -54,16 +55,16 @@ struct street_segment_info {
     double speedLimit;
     OSMID id;
     RoadType type;
-    ezgl::color road_colour;
-    ezgl::color dark_road_colour;
-    ezgl::color arrow_colour;
-    ezgl::color text_colour;
-    ezgl::color dark_text_colour;
+    GdkRGBA road_colour;
+    GdkRGBA dark_road_colour;
+    GdkRGBA arrow_colour;
+    GdkRGBA text_colour;
+    GdkRGBA dark_text_colour;
     double x_avg;
     double y_avg;
     int arrow_width;
-    std::vector<std::pair<ezgl::point2d, ezgl::point2d>> lines_to_draw;
-    std::vector<std::pair<ezgl::point2d, ezgl::point2d>> arrows_to_draw;
+    std::vector<std::pair<Point2D, Point2D>> lines_to_draw;
+    std::vector<std::pair<Point2D, Point2D>> arrows_to_draw;
     std::vector<text_prop> text_to_draw;
     double text_rotation;
     std::vector<std::pair<int, int>> zoom_levels;
@@ -72,7 +73,7 @@ struct street_segment_info {
 
 extern std::vector<RoadType> m2_local_all_street_types;
 
-void draw_arrows(int idx, ezgl::point2d from, ezgl::point2d to);
+void draw_arrows(int idx, Point2D from, Point2D to);
 
 double calculate_angle(double from_pos_x, double from_pos_y, double to_pos_x, double to_pos_y);
 

@@ -29,9 +29,9 @@ double x_to_lon(double x) {
     return x/(kEarthRadiusInMeters * cos(globals.map_lat_avg) * kDegreeToRadian);
 }
 
-ezgl::point2d latlonTopoint(LatLon latlon){
+Point2D latlonTopoint(LatLon latlon){
     double x = lon_to_x(latlon.longitude());
     double y = lat_to_y(latlon.latitude());
-    ezgl::point2d x_y_point2d(x, y);
+    Point2D x_y_point2d{x, y};
     return x_y_point2d;
 }

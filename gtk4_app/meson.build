@@ -1,4 +1,5 @@
 gtk_dep = dependency('gtk4', required: true)
+cairo_dep = dependency('cairo', required: true)
 
 inc = include_directories('include')
 
@@ -10,5 +11,5 @@ sources = [
 executable('gis-evo-gtk4',
   sources,
   include_directories: inc,
-  dependencies: [gtk_dep],
+  dependencies: [gtk_dep, cairo_dep],
   install: true)

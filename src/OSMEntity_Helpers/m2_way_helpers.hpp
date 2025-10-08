@@ -4,13 +4,14 @@
 
 #pragma once
 
+#include <gtk/gtk.h>
 #include <string>
 #include <vector>
 #include "m1.h"
 #include "../ms1helpers.h"
 #include "../ms2helpers.hpp"
 #include "../sort_streetseg/streetsegment_info.hpp"
-#include "ezgl/point.hpp"
+#include "../gtk4_types.hpp"
 #include "typed_osmid_helper.hpp"
 #include "/cad2/ece297s/public/include/streetsdatabase/StreetsDatabaseAPI.h"
 #include "OSMDatabaseAPI.h"
@@ -30,7 +31,7 @@
  */
 struct way_info {
     bool is_closed;
-    std::vector <ezgl::point2d> way_points2d;
+    std::vector<Point2D> way_points2d;
     OSMID way_id;
     //double length;
     std::string way_name;
@@ -40,13 +41,13 @@ struct way_info {
 };
 
 struct feature_info {
-    std::vector<ezgl::point2d> points;
+    std::vector<Point2D> points;
     FeatureType type;
     std::string feature_name;
     TypedOSMID id;
     double x_max, x_min, y_max, y_min, x_avg, y_avg;
-    ezgl::color mycolour;
-    ezgl::color dark_colour;
+    GdkRGBA mycolour;
+    GdkRGBA dark_colour;
     int zoom_lod;
 };
 
@@ -84,6 +85,6 @@ void sort_features();
 
 bool set_lod_feature(int zoom_level, FeatureType type);
 
-//converts a string to color
-ezgl::color stringToRgb(std::string& colour_str);
+//converts a string to GdkRGBA color
+GdkRGBA stringToRgb(std::string& colour_str);
 

@@ -6,11 +6,11 @@
 
 #include "StreetsDatabaseAPI.h"
 #include "../globals.h"
-#include "ezgl/application.hpp"
+#include <gtk/gtk.h>
 #include <queue>
 #include <vector>
 
-extern ezgl::application* global_access;
+extern GtkApplication* global_access;
 
 extern int timesum;
 

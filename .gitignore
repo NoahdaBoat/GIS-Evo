@@ -1,2 +1,5 @@
-resources/maps/*
+resources/maps/
 UPDATE-PLAN.md
+project_docs/
+build/
+.vscode/
