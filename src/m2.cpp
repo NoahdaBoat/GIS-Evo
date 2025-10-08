@@ -46,6 +46,7 @@
 #include <deque>
 #include <chrono>
 #include <thread>
+#include <numbers>
 
 #define VISUALIZE
 
@@ -131,8 +132,10 @@ void clearAllHighlights(GtkApplication* application) {
         intersection_info& info = globals.all_intersections[i];
         info.highlight = false;
     }
-    // TODO: GTK4 - Need to implement refresh drawing
-    // application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
     highlighted_intersections.clear();
 }
 
@@ -272,7 +275,10 @@ void searchEntryEnter(GtkEntry* search_bar, GtkApplication* application) {
             globals.all_intersections[destination_intersection.first].highlight = true;
             outputRoad(application);
         }
-        application->refresh_drawing();
+        
+        if (g_view_state.drawing_area) {
+            gtk_widget_queue_draw(g_view_state.drawing_area);
+        }
     }
 
     // user pressed enter and not in search_route mode
@@ -295,7 +301,9 @@ void searchEntryEnter(GtkEntry* search_bar, GtkApplication* application) {
             message += "                 No intersection                 ";
         }
 
-        application->refresh_drawing();
+        if (g_view_state.drawing_area) {
+            gtk_widget_queue_draw(g_view_state.drawing_area);
+        }
 
         application->create_popup_message("Intersection(s) Information", message.c_str());
     }
@@ -341,7 +349,10 @@ void searchEntryType(GtkEntry* search_bar, GtkApplication* application) {
 
 void zoomFit(GtkEntry* /*zoom_fit_button*/, GtkApplication* application) {
     current_zoom_level = 1;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
 void change_map(GtkEntry* city_maps, GtkApplication* application) {
@@ -357,7 +368,10 @@ void draw_ent(GtkEntry* /*ent_buttom*/, GtkApplication* application) {
         setAllBool(false);
     }
         globals.draw_which_poi[entertainment] = !globals.draw_which_poi[entertainment] ;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
 void draw_trans(GtkEntry* /*trans_buttom*/, GtkApplication* application) {
@@ -365,7 +379,10 @@ void draw_trans(GtkEntry* /*trans_buttom*/, GtkApplication* application) {
         setAllBool(false);
     }
     globals.draw_which_poi[station] = !globals.draw_which_poi[station] ;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
 void draw_basic(GtkEntry* /*basic_buttom*/, GtkApplication* application) {
@@ -373,15 +390,18 @@ void draw_basic(GtkEntry* /*basic_buttom*/, GtkApplication* application) {
         setAllBool(false);
     }
     globals.draw_which_poi[basic] = !globals.draw_which_poi[basic] ;
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
 void darkMode(GtkEntry* /*dark_mode_button*/, GtkApplication* application) {
    globals.dark_mode = !globals.dark_mode;
-   application->refresh_drawing();
-    // draw_path = true;
-    // draw_index+=10;
-    application->refresh_drawing();
+   
+   if (g_view_state.drawing_area) {
+       gtk_widget_queue_draw(g_view_state.drawing_area);
+   }
 }
 
 void aboutButton(GtkWidget* /*About menu button*/, GtkApplication* application) {
@@ -571,7 +591,10 @@ void outputRoad(GtkApplication* application) {
 
     h->set_visible_world(zoom);
     drawRoadArrows(highlighted_route,current_zoom_level,origin_intersection.first);
-    application->refresh_drawing();
+    
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
 void dialogInput(GtkWidget* dialog ,GtkApplication* /*application*/, gpointer input){
@@ -590,8 +613,9 @@ void searchRouteToggle(GtkToggleButton* search_route_toggle, GtkApplication* app
 
 
 void initial_setup(GtkApplication *application, bool /*new_window*/) {
-    application->update_message("Team 20 - ECE297");
-
+    // Note: This function is for legacy EZGL compatibility
+    // The new GTK4 application uses on_activate() instead
+    
     #ifdef VISUALIZE
     global_access = application;
     #endif
@@ -600,7 +624,6 @@ void initial_setup(GtkApplication *application, bool /*new_window*/) {
     // increment row each time we insert a new element.
     int row = 6;
     application->create_popup_message("Complete", "All Items Drawn");
-    application->update_message(std::to_string(current_zoom_level));
     ++row;
 
     // connect widges to callbacks
@@ -764,7 +787,9 @@ void actOnMouseClick(GtkApplication* application, GdkEventButton* event, double 
         application->create_popup_message(title, message2.c_str());
     }
 
-    application->refresh_drawing();
+    if (g_view_state.drawing_area) {
+        gtk_widget_queue_draw(g_view_state.drawing_area);
+    }
 }
 
 
@@ -991,7 +1016,7 @@ void draw_main_canvas(cairo_t *cr, int width, int height) {
     
     // Draw a test circle at origin
     cairo_set_source_rgb(cr, 0.0, 0.0, 1.0);  // Blue
-    cairo_arc(cr, 0, 0, 100 / g_view_state.zoom, 0, 2 * M_PI);
+    cairo_arc(cr, 0, 0, 100 / g_view_state.zoom, 0, 2 * std::numbers::pi);
     cairo_fill(cr);
     
     // Restore Cairo state

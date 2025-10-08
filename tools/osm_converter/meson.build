@@ -11,7 +11,7 @@ endif
 if cpp.has_header('protozero/pbf_reader.hpp', required: false)
   protozero_dep = declare_dependency()
 else
-  protozero_dep = dependency('', required: false)
+  protozero_dep = dependency('protozero', required: false)
 endif
 zlib_dep = dependency('zlib', required: true)
 threads_dep = dependency('threads')
