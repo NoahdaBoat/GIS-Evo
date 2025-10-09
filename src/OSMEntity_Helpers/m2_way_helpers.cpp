@@ -129,7 +129,7 @@ std::unordered_map<OSMID, int> map_way_to_idx() {
 
     for (unsigned int i = 0; i < getNumberOfWays(); ++i) {
         const OSMWay *curr_way = getWayByIndex(i);
-        umap_to_return.insert({curr_way->id(), i});
+        umap_to_return.insert(std::make_pair(curr_way->id(), i));
     }
 
     return umap_to_return;
@@ -177,7 +177,7 @@ void sortSubwayLines() {
                         std::vector<Point2D> a_way;
                         //Do not need to draw the platform
                         if (subway_relation.relation_roles[member_idx] != "platform") {
-                            const OSMWay *way = globals.id_to_way[osmId];
+                            const OSMWay *way = globals.id_to_way[osmId.id()];
                             const std::vector<OSMID> &way_nodes = getWayMembers(way);
                             //loop through the nodes in the ways
                             for (const auto node: way_nodes) {

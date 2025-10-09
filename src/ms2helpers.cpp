@@ -20,7 +20,13 @@
 #include "OSMEntity_Helpers/typed_osmid_helper.hpp"
 
 
-void combo_box_cbk(GtkComboBoxText* self, ezgl::application* app){
+void combo_box_cbk(GtkComboBoxText* self, GtkApplication* app){
+    // TODO: GTK4 - This function needs to be updated for GTK4 message display
+    (void)self;
+    (void)app;
+    
+    // Original EZGL code - needs GTK4 conversion:
+    /*
     //Getting text content of combo box. This call makes a copy that we must free
     auto text = gtk_combo_box_text_get_active_text(self);
     
@@ -35,15 +41,22 @@ void combo_box_cbk(GtkComboBoxText* self, ezgl::application* app){
         // gtk made a copy that we own, need to free
         g_free (text);      
     }
+    */
 }
 
 
-void GtkTextEntry(GtkWidget*, ezgl::application* application) {
+void GtkTextEntry(GtkWidget*, GtkApplication* application) {
+    // TODO: GTK4 - This function needs to be updated for GTK4
+    (void)application;
+    
+    // Original EZGL code - needs GTK4 conversion:
+    /*
     GObject* gtk_object = application->get_object("TextEntry");
     GtkEntry * gtk_entry = GTK_ENTRY(gtk_object);
     const gchar* text = gtk_entry_get_text(gtk_entry);
     application->update_message(text);
     application->refresh_drawing();
+    */
 }
 
 

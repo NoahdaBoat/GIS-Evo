@@ -13,7 +13,7 @@
 #include "../sort_streetseg/streetsegment_info.hpp"
 #include "../gtk4_types.hpp"
 #include "typed_osmid_helper.hpp"
-#include "/cad2/ece297s/public/include/streetsdatabase/StreetsDatabaseAPI.h"
+#include "../StreetsDatabaseAPI.h"
 #include "OSMDatabaseAPI.h"
 
 

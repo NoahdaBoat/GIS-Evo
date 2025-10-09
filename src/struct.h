@@ -5,6 +5,7 @@
 #include <string>
 #include "m1.h"
 #include <unordered_map>
+#include "gtk4_types.hpp"
 #include "ezgl/graphics.hpp"
 #include "POI/POI_setup.hpp"
 
@@ -26,8 +27,8 @@ struct StreetSegmentDistance{
 
 class POI_info{
     public:
-    ezgl::point2d poi_loc;
-    ezgl::point2d poi_text_loc;
+    Point2D poi_loc;
+    Point2D poi_text_loc;
     std::string poi_name;
     POIIdx poi_idx;
     POI_class poi_class;
@@ -35,7 +36,7 @@ class POI_info{
     POI_category poi_category;
 
     //constructor
-    POI_info(ezgl::point2d loc, ezgl::point2d text_loc, std::string name, POIIdx idx, POI_class input_class,POI_category category):poi_loc(loc), poi_text_loc(text_loc), poi_name(name), poi_idx(idx),poi_class(input_class),poi_category(category)
+    POI_info(Point2D loc, Point2D text_loc, std::string name, POIIdx idx, POI_class input_class,POI_category category):poi_loc(loc), poi_text_loc(text_loc), poi_name(name), poi_idx(idx),poi_class(input_class),poi_category(category)
     {
     }
     POI_info(){}
@@ -66,7 +67,7 @@ struct POI_sorted{
 };
 
 struct intersection_info {
-    ezgl::point2d position;
+    Point2D position;
     std::string name;
     IntersectionIdx index;
     OSMID id;
@@ -74,8 +75,8 @@ struct intersection_info {
 };
 
 struct Vec_Png{
-    std::vector<ezgl::surface*> zoom_out;
-    std::vector<ezgl::surface*> zoom_in;
+    std::vector<cairo_surface_t*> zoom_out;
+    std::vector<cairo_surface_t*> zoom_in;
 };
 
 struct City_Country{
@@ -83,8 +84,7 @@ struct City_Country{
     std::string country_name;
 };
 
-class Delivery_Stop{
-public:
+struct Delivery_Stop{
     int stop_type;
     int delivery_index;
     IntersectionIdx intersection_index;

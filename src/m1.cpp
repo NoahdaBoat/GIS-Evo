@@ -32,12 +32,12 @@
 #include "OSMDatabaseAPI.h"
 #include "ms1helpers.h"
 #include "ms2helpers.hpp"
-#include "../POI/POI_helpers.hpp"
-#include "../POI/POI_setup.hpp"
+#include "POI/POI_helpers.hpp"
+#include "POI/POI_setup.hpp"
 #include "Coordinates_Converstions/coords_conversions.hpp"
 #include "foursquareapi/foursquarefunctions.hpp"
-#include "intersection_setup.hpp"
-#include "streetsegment_info.hpp"
+#include "Intersections/intersection_setup.hpp"
+#include "sort_streetseg/streetsegment_info.hpp"
 #include "Intersections/intersection_setup.hpp"
 #include <chrono>
 

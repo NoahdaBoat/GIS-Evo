@@ -49,9 +49,9 @@ core_sources = files(
   # M3 Algorithm
   'm3_algo/astaralgo.cpp',
   
-  # Foursquare API
-  'foursquareapi/create_Foursquare_POI_file.cpp',
-  'foursquareapi/create_Foursquare_POI_objects.cpp',
+  # Foursquare API - disabled due to missing external dependencies (curl, jsoncpp)
+  # 'foursquareapi/create_Foursquare_POI_file.cpp',
+  # 'foursquareapi/create_Foursquare_POI_objects.cpp',
 )
 
 # Note: This is a syntax-check library target

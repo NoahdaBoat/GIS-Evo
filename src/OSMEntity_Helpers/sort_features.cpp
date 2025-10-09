@@ -9,8 +9,8 @@
 #include "typed_osmid_helper.hpp"
 #include "m2_way_helpers.hpp"
 #include "../Coordinates_Converstions/coords_conversions.hpp"
-#include "/cad2/ece297s/public/include/streetsdatabase/StreetsDatabaseAPI.h"
-#include "/cad2/ece297s/public/include/streetsdatabase/OSMDatabaseAPI.h"
+#include "../StreetsDatabaseAPI.h"
+#include "../OSMDatabaseAPI.h"
 #include "../gtk4_types.hpp"
 #include "../globals.h"
 

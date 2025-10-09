@@ -1,8 +1,8 @@
 #ifndef POI_setup
 #define POI_setup
 
-#include "/cad2/ece297s/public/include/streetsdatabase/StreetsDatabaseAPI.h"
-#include "/cad2/ece297s/public/include/streetsdatabase/OSMDatabaseAPI.h"
+#include "../StreetsDatabaseAPI.h"
+#include "../OSMDatabaseAPI.h"
 
 
 

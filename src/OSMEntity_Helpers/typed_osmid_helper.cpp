@@ -4,10 +4,10 @@
 
 #include <vector>
 #include <unordered_map>
-#include "/cad2/ece297s/public/include/milestones/m1.h"
+#include "../m1.h"
 #include "typed_osmid_helper.hpp"
 #include "OSMDatabaseAPI.h"
-#include "coords_conversions.hpp"
+#include "../Coordinates_Converstions/coords_conversions.hpp"
 #include <fstream>
 #include <string>
 #include <algorithm>

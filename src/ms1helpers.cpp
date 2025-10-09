@@ -8,7 +8,7 @@
 #include "ms1helpers.h"
 #include "globals.h"
 #include "struct.h"
-#include "coords_conversions.hpp"
+#include "Coordinates_Converstions/coords_conversions.hpp"
 
 void lowerCase(std::string& Orin_String) {
     // loop through all characters within the string

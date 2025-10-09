@@ -181,8 +181,9 @@ void searchEntryType(GtkEntry* search_bar, GtkApplication* application);
 
 /*
  * Callback function for clicking mouse
+ * Note: GTK4 uses GdkEvent instead of GdkEventButton
  */
-void actOnMouseClick(GtkApplication* application, GdkEventButton* event, double x, double y);
+void actOnMouseClick(GtkApplication* application, GdkEvent* event, double x, double y);
 
 /*
  * Callback function for dialog input

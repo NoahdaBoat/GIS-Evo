@@ -4,7 +4,7 @@
 #include "m3.h"
 #include "m1.h"
 #include "globals.h"
-#include "astaralgo.hpp"
+#include "m3_algo/astaralgo.hpp"
 #include <chrono>
 #include <iostream>
 

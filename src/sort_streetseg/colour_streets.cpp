@@ -147,7 +147,7 @@ void draw_arrows(int idx, Point2D from, Point2D to) {
     double remaining_length = length - 0.5 * arrow_length;
     while (remaining_length >= 1.5 * arrow_length){
 
-        ezgl::point2d arrow_shaft_end(
+        Point2D arrow_shaft_end(
                 from.x + unit_dx * arrow_length,
                 from.y + unit_dy * arrow_length
         );
@@ -155,11 +155,11 @@ void draw_arrows(int idx, Point2D from, Point2D to) {
         double angle = atan2(unit_dy, unit_dx);
         double arrow_angle = M_PI / 8; // 22.5 degrees
 
-        ezgl::point2d arrow_left_end(
+        Point2D arrow_left_end(
                 arrow_shaft_end.x - arrowhead_length * cos(angle - arrow_angle),
                 arrow_shaft_end.y - arrowhead_length * sin(angle - arrow_angle)
         );
-        ezgl::point2d arrow_right_end(
+        Point2D arrow_right_end(
                 arrow_shaft_end.x - arrowhead_length * cos(angle + arrow_angle),
                 arrow_shaft_end.y - arrowhead_length * sin(angle + arrow_angle)
         );
@@ -205,10 +205,10 @@ void compute_streets_info() {
         StreetSegmentInfo info = getStreetSegmentInfo(i);
 
         globals.all_street_segments[i].arrow_width = 1;
-        globals.all_street_segments[i].arrow_colour = ezgl::BLACK;
+        globals.all_street_segments[i].arrow_colour = {0.0f, 0.0f, 0.0f, 1.0f}; // BLACK
         globals.all_street_segments[i].arrow_zoom_dep = 9;
-        globals.all_street_segments[i].text_colour = ezgl::BLACK;
-        globals.all_street_segments[i].dark_text_colour = ezgl::WHITE;
+        globals.all_street_segments[i].text_colour = {0.0f, 0.0f, 0.0f, 1.0f}; // BLACK
+        globals.all_street_segments[i].dark_text_colour = {1.0f, 1.0f, 1.0f, 1.0f}; // WHITE
         globals.all_street_segments[i].type = globals.ss_road_type[i];
         globals.all_street_segments[i].street = info.streetID;
         globals.all_street_segments[i].street_name = getStreetName(info.streetID);

@@ -6,7 +6,7 @@
 #include "m3.h"
 #include "ms4helpers.hpp"
 #include "globals.h"
-#include "astaralgo.hpp"
+#include "m3_algo/astaralgo.hpp"
 #include "sort_streetseg/streetsegment_info.hpp"
 #include <omp.h>
 

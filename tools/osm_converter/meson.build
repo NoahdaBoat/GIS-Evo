@@ -2,10 +2,11 @@ converter_inc = include_directories('include', '../../third_party/libosmium/incl
 
 cpp = meson.get_compiler('cpp')
 
-if cpp.has_header('osmium/io/reader.hpp', required: true)
+if cpp.has_header('osmium/io/reader.hpp', required: false, include_directories: converter_inc)
   libosmium_dep = declare_dependency()
 else
-  error('libosmium headers not found; install libosmium2-dev or set include path')
+  warning('libosmium headers not found; skipping osm_converter tool')
+  subdir_done()
 endif
 
 if cpp.has_header('protozero/pbf_reader.hpp', required: false)

@@ -1,6 +1,6 @@
 #include "POI_setup.hpp"
 #include "POI_helpers.hpp"
-#include "/cad2/ece297s/public/include/streetsdatabase/StreetsDatabaseAPI.h"
+#include "../StreetsDatabaseAPI.h"
 #include "../Coordinates_Converstions/coords_conversions.hpp"
 #include "../globals.h"
 #include <utility>

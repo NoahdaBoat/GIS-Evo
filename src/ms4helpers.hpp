@@ -19,8 +19,7 @@ enum Stop_Type{
     DROPOFF,
 };
 
-class OneRoute {
-public:
+struct OneRoute {
     std::vector<StreetSegmentIdx> route;
     double travel_time;
     IntersectionIdx start;

@@ -9,7 +9,7 @@
 #include <gtk/gtk.h>
 #include <cairo.h>
 #include "gtk4_types.hpp"
-#include "coords_conversions.hpp"
+#include "Coordinates_Converstions/coords_conversions.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -163,7 +163,7 @@ Directions findAngleSegments(StreetSegmentIdx from, StreetSegmentIdx to){
     double pi = std::acos(-1);
     street_segment_info info_from = globals.all_street_segments[from];
     street_segment_info info_to = globals.all_street_segments[to];
-    ezgl::point2d src_pos, intermediate,dst_pos;
+    Point2D src_pos, intermediate, dst_pos;
     bool from_curved = true;
     bool to_curved = true;
     if(info_from.num_curve_point==0){
