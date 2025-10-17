@@ -70,7 +70,7 @@ enum POI_category{
     BASIC =0,
     FOOD,
     DRINK,
-    HOSPITAL,
+    BASIC_HOSPITAL,  // Renamed to avoid conflict with StreetsDatabaseAPI.h
     SHOPPING,
     NEGLECT,
     SUBORDINATE,

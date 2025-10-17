@@ -1,17 +1,17 @@
-#ifndef LATLON_H
-#define LATLON_H
+#pragma once
 
-class LatLon {
-public:
-    LatLon(double lat = 0.0, double lon = 0.0) : lat_(lat), lon_(lon) {}
-    double latitude() const { return lat_; }
-    double longitude() const { return lon_; }
+#include <cmath>
+
+struct LatLon {
+    double lat;
+    double lon;
+    LatLon() : lat(0.0), lon(0.0) {}
+    LatLon(double latitude, double longitude) : lat(latitude), lon(longitude) {}
+    double latitude() const { return lat; }
+    double longitude() const { return lon; }
+    
+    // Comparison operator
     bool operator==(const LatLon& other) const {
-        return lat_ == other.lat_ && lon_ == other.lon_;
+        return std::abs(lat - other.lat) < 1e-9 && std::abs(lon - other.lon) < 1e-9;
     }
-private:
-    double lat_;
-    double lon_;
 };
-
-#endif // LATLON_H

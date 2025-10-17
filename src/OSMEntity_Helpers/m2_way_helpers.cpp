@@ -2,7 +2,6 @@
 #include <vector>
 #include <algorithm>
 #include <execution>
-#include "../ms1helpers.h"
 #include "LatLon.h"
 #include "OSMDatabaseAPI.h"
 #include <unordered_map>
@@ -10,7 +9,13 @@
 #include "../ezgl/point.hpp"
 #include "../Coordinates_Converstions/coords_conversions.hpp"
 #include "../sort_streetseg/streetsegment_info.hpp"
-#include "globals.h"
+#include "../binary_loader/binary_database.hpp"
+
+// Local static storage for OSM entity data (replaces globals)
+static std::unordered_map<OSMID, const OSMNode*> node_to_id;
+static std::unordered_map<OSMID, const OSMWay*> id_to_way;
+static std::vector<RoadType> ss_road_type;
+
 std::unordered_map<std::string, RoadType> const str_to_enum = { {"primary", RoadType::primary},
                                                                 {"residential", RoadType::residential},
                                                                 {"tertiary", RoadType::tertiary},
@@ -49,16 +54,18 @@ std::vector<way_info> create_vector_of_ways(std::unordered_map<OSMID, feature_da
     // the latlon, convert to point2d, store in vector
     std::vector<OSMID> way_nodes;
     std::vector<way_info> all_ways_info;
-    //all_ways_info.resize(getNumberOfWays());
-    for (int i = 0; i < getNumberOfWays(); ++i) {
+    
+    // Get the BinaryDatabase instance for coordinate conversion
+    auto& db = gisevo::BinaryDatabase::instance();
+    double map_lat_avg_rad = db.get_avg_lat_rad();
+    
+    for (size_t i = 0; i < getNumberOfWays(); ++i) {
         const OSMWay *current_way = getWayByIndex(i);
         way_info info;
         info.way_use = way_enums::notrail;
         if (!current_way->isClosed()) {
             info.is_closed = current_way->isClosed();
             info.way_id = current_way->id();
-//            auto length_search = globals.way_distance.find(current_way->id());
-//            info.length = length_search->second;
             auto feature_info_search = id_to_way.find(current_way->id());
             if (feature_info_search != id_to_way.end()) {
                 info.way_name = feature_info_search->second->feature_name;
@@ -104,14 +111,14 @@ std::vector<way_info> create_vector_of_ways(std::unordered_map<OSMID, feature_da
 
             }
             way_nodes = getWayMembers(current_way);
-            for (int j = 0; j < way_nodes.size(); ++j) {
-                auto search = globals.node_to_id.find(way_nodes[j]);
-                const OSMNode *current_node = search->second;
-                LatLon node_position = current_node->coords();
-                double x_pos = lon_to_x(node_position.longitude());
-                double y_pos = lat_to_y(node_position.latitude());
-                Point2D current_point2d{x_pos, y_pos};
-                info.way_points2d.push_back(current_point2d);
+            for (size_t j = 0; j < way_nodes.size(); ++j) {
+                auto search = node_to_id.find(way_nodes[j]);
+                if (search != node_to_id.end()) {
+                    const OSMNode *current_node = search->second;
+                    LatLon node_position = current_node->coords();
+                    Point2D current_point2d = latlonTopoint(node_position, map_lat_avg_rad);
+                    info.way_points2d.push_back(current_point2d);
+                }
             }
         }
         all_ways_info.push_back(info);
@@ -136,22 +143,21 @@ std::unordered_map<OSMID, int> map_way_to_idx() {
 }
 
 void assign_type_to_way() {
-
-    globals.ss_road_type.resize(getNumStreetSegments());
+    ss_road_type.resize(getNumStreetSegments());
     for (uint i = 0; i < getNumStreetSegments(); ++i) {
         StreetSegmentInfo info = getStreetSegmentInfo(i);
-        auto search = globals.id_to_way.find(info.wayOSMID);
-        if (search != globals.id_to_way.end()) {
+        auto search = id_to_way.find(info.wayOSMID);
+        if (search != id_to_way.end()) {
             const OSMWay *current_way = search->second;
             for (uint j = 0; j < getTagCount(current_way); ++j) {
                 std::pair<std::string, std::string> tag_pair = getTagPair(current_way, j);
                 if (tag_pair.first == "highway") {
                     auto find_enum = str_to_enum.find(tag_pair.second);
                     if (find_enum != str_to_enum.end()) {
-                        globals.ss_road_type[i] = find_enum->second;
+                        ss_road_type[i] = find_enum->second;
                     }
                     else {
-                        globals.ss_road_type[i] = RoadType::other;
+                        ss_road_type[i] = RoadType::other;
                     }
                 }
             }
@@ -160,6 +166,10 @@ void assign_type_to_way() {
 }
 
 void sortSubwayLines() {
+    // Get the BinaryDatabase instance for coordinate conversion
+    auto& db = gisevo::BinaryDatabase::instance();
+    double map_lat_avg_rad = db.get_avg_lat_rad();
+    
     //loop through all the relations to find subway lines
     for(unsigned index_relate = 0; index_relate < getNumberOfRelations(); index_relate++){
         const OSMRelation* current_relation = getRelationByIndex(index_relate);
@@ -171,21 +181,27 @@ void sortSubwayLines() {
                 subway_relation.members = getRelationMembers(current_relation);
                 subway_relation.relation_roles= getRelationMemberRoles(current_relation);
                 //loop through all the members of subway line to find the way:
-                for(int member_idx = 0; member_idx < subway_relation.members.size();member_idx++){
+                for(size_t member_idx = 0; member_idx < subway_relation.members.size();member_idx++){
                     TypedOSMID osmId = subway_relation.members[member_idx];
                     if(osmId.type()==TypedOSMID::Way) {
                         std::vector<Point2D> a_way;
                         //Do not need to draw the platform
                         if (subway_relation.relation_roles[member_idx] != "platform") {
-                            const OSMWay *way = globals.id_to_way[osmId.id()];
-                            const std::vector<OSMID> &way_nodes = getWayMembers(way);
-                            //loop through the nodes in the ways
-                            for (const auto node: way_nodes) {
-                                const OSMNode *node_ptr = globals.node_to_id[node];
-                                Point2D loc = latlonTopoint(getNodeCoords(node_ptr));
-                                a_way.push_back(loc);
+                            auto way_search = id_to_way.find(osmId.id());
+                            if (way_search != id_to_way.end()) {
+                                const OSMWay *way = way_search->second;
+                                const std::vector<OSMID> &way_nodes = getWayMembers(way);
+                                //loop through the nodes in the ways
+                                for (const auto node: way_nodes) {
+                                    auto node_search = node_to_id.find(node);
+                                    if (node_search != node_to_id.end()) {
+                                        const OSMNode *node_ptr = node_search->second;
+                                        Point2D loc = latlonTopoint(getNodeCoords(node_ptr), map_lat_avg_rad);
+                                        a_way.push_back(loc);
+                                    }
+                                }
+                                subway_relation.subway_way.push_back(a_way);
                             }
-                            subway_relation.subway_way.push_back(a_way);
                         }
                     }
                 }
@@ -244,7 +260,7 @@ GdkRGBA stringToRgb(std::string& colour_str){
         blue = 0x00;
     }
     // Convert 0-255 range to 0.0-1.0 range for GdkRGBA
-    GdkRGBA colour_rgb = {red / 255.0, green / 255.0, blue / 255.0, 1.0};
+    GdkRGBA colour_rgb = {static_cast<float>(red / 255.0), static_cast<float>(green / 255.0), static_cast<float>(blue / 255.0), 1.0f};
     return colour_rgb;
 }
 

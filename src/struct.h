@@ -3,8 +3,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include "m1.h"
 #include <unordered_map>
+#include "StreetsDatabaseAPI.h"
 #include "gtk4_types.hpp"
 #include "ezgl/graphics.hpp"
 #include "POI/POI_setup.hpp"
@@ -43,21 +43,6 @@ class POI_info{
 
 };
 
-class internet_poi : public POI_info{
-public:
-    std::string city;
-    std::string address;
-    float rating;
-    std::string website;
-    std::string inner_category;
-    POI_entertainment top_category;
-    std::string country;
-    LatLon pos;
-    internet_poi() : POI_info() {
-    }
-};
-
-
 struct POI_sorted{
     std::vector<std::vector<POI_info>> basic_poi;
     std::vector<std::vector<POI_info>> entertainment_poi;
@@ -87,10 +72,16 @@ struct City_Country{
 struct Delivery_Stop{
     int stop_type;
     int delivery_index;
-    IntersectionIdx intersection_index;
-    Delivery_Stop(int type,int id, int index):stop_type(type),delivery_index(id),intersection_index(index){};
-    Delivery_Stop():stop_type(0),delivery_index(0),intersection_index(0){};
+    IntersectionIdx pickUp;
+    IntersectionIdx dropOff;
+    Delivery_Stop(int type,int id, IntersectionIdx index):stop_type(type),delivery_index(id),pickUp(0),dropOff(0){
+        if (type == 0 || type == 1) pickUp = index; // DEPOT=0 or PICKUP=1
+        else dropOff = index;
+    };
+    Delivery_Stop():stop_type(0),delivery_index(0),pickUp(0),dropOff(0){};
 };
+
+typedef Delivery_Stop DeliveryInf;
 
 class Delivery_details {
 public:

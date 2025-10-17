@@ -13,6 +13,21 @@ using FeatureIdx = unsigned;
 using StreetSegmentIdx = unsigned;
 using StreetIdx = unsigned;
 
+// FeatureType enumeration
+enum class FeatureType {
+    UNKNOWN,
+    PARK,
+    BEACH,
+    LAKE,
+    RIVER,
+    ISLAND,
+    BUILDING,
+    GREENSPACE,
+    GOLFCOURSE,
+    STREAM,
+    GLACIER
+};
+
 struct OSMNode {
     OSMID id() const { return 0; }
     LatLon coords() const { return LatLon(0, 0); }
@@ -26,6 +41,8 @@ struct OSMWay {
 struct OSMRelation {
     OSMID id() const { return 0; }
 };
+
+// Missing enums for POI and features (stubbed for compilation)
 
 // Struct definitions
 struct StreetSegmentInfo {
@@ -47,7 +64,8 @@ struct CourierSubPath {
     std::vector<StreetSegmentIdx> subpath;
     IntersectionIdx start_intersection;
     IntersectionIdx end_intersection;
-    
+    std::pair<IntersectionIdx, IntersectionIdx> intersections;
+
     CourierSubPath() : start_intersection(0), end_intersection(0) {}
 };
 
@@ -74,7 +92,7 @@ std::pair<std::string, std::string> getTagPair(const OSMNode* node, unsigned tag
 
 unsigned getNumberOfPOIs();
 std::string getPOIName(POIIdx poi_idx);
-std::string getPOIType(POIIdx poi_idx);
+std::string getPOIType(POIIdx poi_idx);  // Keep original string version, remove POIType version to avoid ambiguity
 LatLon getPOIPosition(POIIdx poi_idx);
 
 unsigned getFeaturePointCount(FeatureIdx feature_idx);
@@ -94,7 +112,12 @@ unsigned getNumIntersectionStreetSegment(IntersectionIdx intersection_idx);
 unsigned getIntersectionStreetSegment(unsigned street_segment_num, IntersectionIdx intersection_idx);
 
 // Feature functions
+unsigned getNumFeatures();
+FeatureType getFeatureType(FeatureIdx idx);
+OSMID getFeatureOSMID(FeatureIdx idx);
+std::string getFeatureName(FeatureIdx idx);
 unsigned getNumFeaturePoints(FeatureIdx feature_idx);
+LatLon getFeaturePoint(unsigned point_idx, FeatureIdx feature_idx);
 
 // OSM functions
 unsigned getNumberOfWays();
@@ -109,6 +132,19 @@ std::pair<std::string, std::string> getTagPair(const OSMRelation* relation, unsi
 // Note: getRelationMembers is defined in OSMDatabaseAPI.h with TypedOSMID return type
 std::vector<std::string> getRelationMemberRoles(const OSMRelation* relation);
 
+// Stubbed POI accessors (from Task C5)
+
+// Spatial query functions
+std::vector<unsigned> queryStreetsInBounds(double min_x, double min_y, double max_x, double max_y);
+std::vector<unsigned> queryIntersectionsInBounds(double min_x, double min_y, double max_x, double max_y);
+std::vector<unsigned> queryPOIsInBounds(double min_x, double min_y, double max_x, double max_y);
+std::vector<unsigned> queryFeaturesInBounds(double min_x, double min_y, double max_x, double max_y);
+
 // Add more declarations as needed
+
+// Missing functions for compilation
+bool loadStreetsDatabaseBIN(std::string path);
+void closeStreetDatabase();
+const double NO_ANGLE = -1.0;
 
 #endif // STREETSDATABASEAPI_H

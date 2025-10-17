@@ -270,7 +270,7 @@ void compute_streets_info() {
                 draw_arrows(i, {from_pos_x, from_pos_y}, {first_x, first_y});
             }
 
-            for (int j = 0; j < info.numCurvePoints - 1; j++) {
+            for (size_t j = 0; j < static_cast<size_t>(info.numCurvePoints) - 1; j++) {
                 LatLon front_curve_point = getStreetSegmentCurvePoint(j, i);
                 LatLon back_curve_point = getStreetSegmentCurvePoint(j + 1, i);
                 double front_x, front_y, back_x, back_y;

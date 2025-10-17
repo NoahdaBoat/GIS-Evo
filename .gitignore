@@ -3,3 +3,4 @@ UPDATE-PLAN.md
 project_docs/
 build/
 .vscode/
+.cache/

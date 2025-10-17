@@ -2,9 +2,9 @@
 #define ASTARALGO_HPP
 
 #include <vector>
-#include "../StreetsDatabaseAPI.h"
+#include "../m3.h"
 
-// Function declarations for A* algorithm
-std::vector<IntersectionIdx> findPathBetweenIntersections(IntersectionIdx start, IntersectionIdx end);
+// Function declaration for A* algorithm (matches m3.h signature)
+std::vector<StreetSegmentIdx> aStarAlgorithm(IntersectionIdx start, IntersectionIdx end, double turn_penalty);
 
 #endif // ASTARALGO_HPP

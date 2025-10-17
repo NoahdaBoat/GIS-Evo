@@ -4,13 +4,14 @@
 
 #include <vector>
 #include <unordered_map>
-#include "../m1.h"
 #include "typed_osmid_helper.hpp"
 #include "OSMDatabaseAPI.h"
 #include "../Coordinates_Converstions/coords_conversions.hpp"
 #include <fstream>
 #include <string>
 #include <algorithm>
+#include "../binary_loader/binary_database.hpp"
+#include "../struct.h"
 
 
 typedef unsigned int uint;
@@ -64,6 +65,13 @@ bool compare_relation_names(each_relation e1) {
 }
 
 void initSubwayStations(){
+    // Get the BinaryDatabase instance for coordinate conversion
+    auto& db = gisevo::BinaryDatabase::instance();
+    double map_lat_avg_rad = db.get_avg_lat_rad();
+    
+    // Local static storage for POI data (replaces globals.poi_sorted)
+    static POI_sorted poi_sorted;
+    
     Point2D increment{0, 10};
     for(unsigned node_idx =0; node_idx < getNumberOfNodes();node_idx++){
         const OSMNode *current_node = getNodeByIndex(node_idx);
@@ -71,7 +79,7 @@ void initSubwayStations(){
                 std::pair<std::string,std::string> tag_pair = getTagPair(current_node,tag);
                 if(tag_pair.first == "station" && tag_pair.second == "subway"){
                     const OSMNode* node = getNodeByIndex(node_idx);
-                    Point2D position = latlonTopoint(getNodeCoords(node));
+                    Point2D position = latlonTopoint(getNodeCoords(node), map_lat_avg_rad);
                     Point2D text_pos{position.x + increment.x, position.y + increment.y};
                     std::string name;
                     for(unsigned j = 0; j< getTagCount(current_node);j++){
@@ -83,7 +91,7 @@ void initSubwayStations(){
                     POIIdx idx =0;
                     POI_class rand_class = static_cast<POI_class> (0);
                     POI_info subway_info(position,text_pos,name,idx,rand_class,SUBWAY);
-                    globals.poi_sorted.stations_poi.push_back(subway_info);
+                    poi_sorted.stations_poi.push_back(subway_info);
                     break;
                 }
             }

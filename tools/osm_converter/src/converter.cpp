@@ -98,6 +98,130 @@ float parse_max_speed(const osmium::TagList& tags) {
   }
 }
 
+FeatureType encode_feature_type(const osmium::TagList& tags) {
+  // Check for natural features
+  if (const char* natural = tags.get_value_by_key("natural")) {
+    const std::string lower = to_lower_copy(natural);
+    if (lower == "water" || lower == "lake" || lower == "pond" || lower == "reservoir") {
+      return FeatureType::kWater;
+    }
+    if (lower == "forest" || lower == "wood") {
+      return FeatureType::kForest;
+    }
+    if (lower == "grassland" || lower == "meadow") {
+      return FeatureType::kGrassland;
+    }
+    if (lower == "wetland" || lower == "marsh") {
+      return FeatureType::kWetland;
+    }
+    if (lower == "beach") {
+      return FeatureType::kBeach;
+    }
+    if (lower == "coastline") {
+      return FeatureType::kCoastline;
+    }
+  }
+  
+  // Check for leisure features
+  if (const char* leisure = tags.get_value_by_key("leisure")) {
+    const std::string lower = to_lower_copy(leisure);
+    if (lower == "park") {
+      return FeatureType::kPark;
+    }
+    if (lower == "garden") {
+      return FeatureType::kGarden;
+    }
+    if (lower == "playground") {
+      return FeatureType::kPlayground;
+    }
+    if (lower == "stadium") {
+      return FeatureType::kStadium;
+    }
+  }
+  
+  // Check for landuse features
+  if (const char* landuse = tags.get_value_by_key("landuse")) {
+    const std::string lower = to_lower_copy(landuse);
+    if (lower == "forest") {
+      return FeatureType::kForest;
+    }
+    if (lower == "grass" || lower == "grassland") {
+      return FeatureType::kGrassland;
+    }
+    if (lower == "park") {
+      return FeatureType::kPark;
+    }
+    if (lower == "cemetery") {
+      return FeatureType::kCemetery;
+    }
+  }
+  
+  // Check for amenity features
+  if (const char* amenity = tags.get_value_by_key("amenity")) {
+    const std::string lower = to_lower_copy(amenity);
+    if (lower == "hospital") {
+      return FeatureType::kHospital;
+    }
+    if (lower == "school") {
+      return FeatureType::kSchool;
+    }
+    if (lower == "university" || lower == "college") {
+      return FeatureType::kUniversity;
+    }
+  }
+  
+  // Check for building features
+  if (tags.has_key("building")) {
+    return FeatureType::kBuilding;
+  }
+  
+  // Check for waterway features
+  if (const char* waterway = tags.get_value_by_key("waterway")) {
+    const std::string lower = to_lower_copy(waterway);
+    if (lower == "river") {
+      return FeatureType::kRiver;
+    }
+    if (lower == "stream") {
+      return FeatureType::kStream;
+    }
+    if (lower == "canal") {
+      return FeatureType::kCanal;
+    }
+  }
+  
+  // Check for aeroway features
+  if (tags.has_key("aeroway")) {
+    return FeatureType::kAirport;
+  }
+  
+  // Check for railway features
+  if (tags.has_key("railway")) {
+    return FeatureType::kRailway;
+  }
+  
+  // Check for bridge/tunnel features
+  if (tags.has_key("bridge")) {
+    return FeatureType::kBridge;
+  }
+  if (tags.has_key("tunnel")) {
+    return FeatureType::kTunnel;
+  }
+  
+  // Check for barrier features
+  if (const char* barrier = tags.get_value_by_key("barrier")) {
+    const std::string lower = to_lower_copy(barrier);
+    if (lower == "wall") {
+      return FeatureType::kWall;
+    }
+    if (lower == "fence") {
+      return FeatureType::kFence;
+    }
+    return FeatureType::kBarrier;
+  }
+  
+  return FeatureType::kUnknown;
+}
+
 std::optional<std::string> detect_poi_category(const osmium::TagList& tags) {
   if (const char* amenity = tags.get_value_by_key("amenity")) {
     return std::string("amenity:") + amenity;
@@ -129,6 +253,17 @@ std::optional<std::string> detect_poi_category(const osmium::TagList& tags) {
   return std::nullopt;
 }
 
+std::vector<std::pair<std::string, std::string>> extract_tags(const osmium::TagList& tags) {
+  std::vector<std::pair<std::string, std::string>> result;
+  result.reserve(tags.size());
+  
+  for (const auto& tag : tags) {
+    result.emplace_back(std::string(tag.key()), std::string(tag.value()));
+  }
+  
+  return result;
+}
+
 class HighwayCollector final : public osmium::handler::Handler {
  public:
   explicit HighwayCollector(ConverterDataInternal& internal)
@@ -144,6 +279,7 @@ class HighwayCollector final : public osmium::handler::Handler {
     record.osm_id = way.id();
     record.category = encode_highway_category(highway);
     record.max_speed_kph = parse_max_speed(way.tags());
+    record.tags = extract_tags(way.tags());
 
     if (const char* name = way.tags().get_value_by_key("name")) {
       record.name = name;
@@ -159,6 +295,40 @@ class HighwayCollector final : public osmium::handler::Handler {
     }
 
     internal_.data.street_segments.emplace_back(std::move(record));
+  }
+
+ private:
+  ConverterDataInternal& internal_;
+};
+
+class FeatureCollector final : public osmium::handler::Handler {
+ public:
+  explicit FeatureCollector(ConverterDataInternal& internal)
+    : internal_(internal) {}
+
+  void way(const osmium::Way& way) {
+    FeatureType feature_type = encode_feature_type(way.tags());
+    if (feature_type == FeatureType::kUnknown) {
+      return;
+    }
+
+    FeatureRecord record;
+    record.osm_id = way.id();
+    record.type = feature_type;
+    record.is_closed = way.is_closed();
+    record.tags = extract_tags(way.tags());
+    
+    if (const char* name = way.tags().get_value_by_key("name")) {
+      record.name = name;
+    }
+
+    // Store node references
+    for (const auto& node_ref : way.nodes()) {
+      record.node_refs.push_back(node_ref.ref());
+      internal_.referenced_nodes.insert(node_ref.ref());
+    }
+
+    internal_.data.features.emplace_back(std::move(record));
   }
 
  private:
@@ -182,6 +352,7 @@ class NodeCollector final : public osmium::handler::Handler {
       record.osm_id = id;
       record.lat = node.location().lat();
       record.lon = node.location().lon();
+      record.tags = extract_tags(node.tags());
 
       auto [iter, inserted] = internal_.node_index_lookup.emplace(id, internal_.data.nodes.size());
       if (inserted) {
@@ -195,11 +366,58 @@ class NodeCollector final : public osmium::handler::Handler {
       poi.lat = node.location().lat();
       poi.lon = node.location().lon();
       poi.category = std::move(*poi_category);
+      poi.tags = extract_tags(node.tags());
       if (const char* name = node.tags().get_value_by_key("name")) {
         poi.name = name;
       }
       internal_.data.pois.emplace_back(std::move(poi));
     }
+  }
+
+ private:
+  ConverterDataInternal& internal_;
+};
+
+class RelationCollector final : public osmium::handler::Handler {
+ public:
+  explicit RelationCollector(ConverterDataInternal& internal)
+      : internal_(internal) {}
+
+  void relation(const osmium::Relation& relation) {
+    RelationRecord record;
+    record.osm_id = relation.id();
+    record.tags = extract_tags(relation.tags());
+
+    // Extract members
+    for (const auto& member : relation.members()) {
+      record.member_ids.push_back(member.ref());
+      
+      // Convert osmium member type to our enum
+      std::uint8_t member_type;
+      switch (member.type()) {
+        case osmium::item_type::node:
+          member_type = 0; // Node
+          break;
+        case osmium::item_type::way:
+          member_type = 1; // Way
+          break;
+        case osmium::item_type::relation:
+          member_type = 2; // Relation
+          break;
+        default:
+          continue; // Skip unknown types
+      }
+      record.member_types.push_back(member_type);
+      
+      // Store role
+      if (member.role()) {
+        record.member_roles.emplace_back(member.role());
+      } else {
+        record.member_roles.emplace_back(""); // Empty role
+      }
+    }
+
+    internal_.data.relations.emplace_back(std::move(record));
   }
 
  private:
@@ -247,6 +465,16 @@ void write_node_refs(std::ofstream& out, const std::vector<std::int64_t>& refs) 
   }
 }
 
+void write_tags(std::ofstream& out, const std::vector<std::pair<std::string, std::string>>& tags) {
+  const std::uint32_t tag_count = static_cast<std::uint32_t>(tags.size());
+  write_pod(out, tag_count);
+  
+  for (const auto& tag : tags) {
+    write_string(out, tag.first);  // key
+    write_string(out, tag.second); // value
+  }
+}
+
 void write_streets_file(const ConverterDataInternal& internal, const fs::path& output_file) {
   std::ofstream out(output_file, std::ios::binary | std::ios::trunc);
   if (!out) {
@@ -265,6 +493,7 @@ void write_streets_file(const ConverterDataInternal& internal, const fs::path& o
     write_pod(out, node.osm_id);
     write_pod(out, node.lat);
     write_pod(out, node.lon);
+    write_tags(out, node.tags);
   }
 
   for (const auto& segment : internal.data.street_segments) {
@@ -274,6 +503,7 @@ void write_streets_file(const ConverterDataInternal& internal, const fs::path& o
     write_pod(out, segment.max_speed_kph);
     write_string(out, segment.name);
     write_node_refs(out, segment.node_refs);
+    write_tags(out, segment.tags);
   }
 }
 
@@ -295,6 +525,39 @@ void write_osm_file(const ConverterDataInternal& internal, const fs::path& outpu
     write_pod(out, poi.lon);
     write_string(out, poi.category);
     write_string(out, poi.name);
+    write_tags(out, poi.tags);
+  }
+
+  const std::uint64_t feature_count = internal.data.features.size();
+  write_pod(out, feature_count);
+
+  for (const auto& feature : internal.data.features) {
+    write_pod(out, feature.osm_id);
+    write_pod(out, static_cast<std::uint8_t>(feature.type));
+    write_string(out, feature.name);
+    write_pod(out, static_cast<std::uint64_t>(feature.node_refs.size()));
+    for (const auto& node_ref : feature.node_refs) {
+      write_pod(out, node_ref);
+    }
+    write_pod(out, feature.is_closed);
+    write_tags(out, feature.tags);
+  }
+
+  const std::uint64_t relation_count = internal.data.relations.size();
+  write_pod(out, relation_count);
+
+  for (const auto& relation : internal.data.relations) {
+    write_pod(out, relation.osm_id);
+    write_tags(out, relation.tags);
+    
+    const std::uint32_t member_count = static_cast<std::uint32_t>(relation.member_ids.size());
+    write_pod(out, member_count);
+    
+    for (std::size_t i = 0; i < relation.member_ids.size(); ++i) {
+      write_pod(out, relation.member_ids[i]);
+      write_pod(out, relation.member_types[i]);
+      write_string(out, relation.member_roles[i]);
+    }
   }
 }
 
@@ -304,7 +567,8 @@ ConverterDataInternal build_dataset(const fs::path& input, bool quiet) {
   {
     osmium::io::Reader way_reader{input, osmium::osm_entity_bits::way};
     HighwayCollector highway_handler{internal};
-    osmium::apply(way_reader, highway_handler);
+    FeatureCollector feature_handler{internal};
+    osmium::apply(way_reader, highway_handler, feature_handler);
     way_reader.close();
   }
 
@@ -313,6 +577,13 @@ ConverterDataInternal build_dataset(const fs::path& input, bool quiet) {
     NodeCollector node_handler{internal};
     osmium::apply(node_reader, node_handler);
     node_reader.close();
+  }
+
+  {
+    osmium::io::Reader relation_reader{input, osmium::osm_entity_bits::relation};
+    RelationCollector relation_handler{internal};
+    osmium::apply(relation_reader, relation_handler);
+    relation_reader.close();
   }
 
   {
@@ -401,7 +672,8 @@ int run_converter(const ConverterConfig& config) {
   if (!config.quiet) {
     std::cout << "[converter] Wrote " << internal.data.nodes.size() << " nodes, "
               << internal.data.street_segments.size() << " street segments, "
-              << internal.data.pois.size() << " POIs in " << elapsed.count() << "ms"
+              << internal.data.pois.size() << " POIs, "
+              << internal.data.features.size() << " features in " << elapsed.count() << "ms"
               << std::endl;
   }
 

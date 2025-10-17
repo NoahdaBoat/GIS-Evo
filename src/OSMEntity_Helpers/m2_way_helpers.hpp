@@ -7,9 +7,6 @@
 #include <gtk/gtk.h>
 #include <string>
 #include <vector>
-#include "m1.h"
-#include "../ms1helpers.h"
-#include "../ms2helpers.hpp"
 #include "../sort_streetseg/streetsegment_info.hpp"
 #include "../gtk4_types.hpp"
 #include "typed_osmid_helper.hpp"

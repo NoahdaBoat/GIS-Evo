@@ -2,32 +2,34 @@
 // Created by montinoa on 2/28/24.
 //
 
-#include "m1.h"
-#include "../ms1helpers.h"
 #include "coords_conversions.hpp"
+#include "StreetsDatabaseAPI.h"
+#include <limits>
 
 double find_map_bounds() {
-    globals.max_lat = std::numeric_limits<double>::lowest();
-    globals.max_lon = std::numeric_limits<double>::lowest();
-    globals.min_lat = std::numeric_limits<double>::max();
-    globals.min_lon = std::numeric_limits<double>::max();
-    for (int i = 0; i < getNumberOfNodes(); ++i) {
-        const OSMNode* currentNode = getNodeByIndex(i);
-        LatLon coords = getNodeCoords(currentNode);
-        if (coords.latitude() > globals.max_lat) {
-            globals.max_lat = coords.latitude();
+    double max_lat = std::numeric_limits<double>::lowest();
+    double max_lon = std::numeric_limits<double>::lowest();
+    double min_lat = std::numeric_limits<double>::max();
+    double min_lon = std::numeric_limits<double>::max();
+    
+    // Use StreetsDatabaseAPI instead of global variables
+    unsigned num_intersections = getNumIntersections();
+    for (unsigned i = 0; i < num_intersections; ++i) {
+        LatLon coords = getIntersectionPosition(i);
+        if (coords.latitude() > max_lat) {
+            max_lat = coords.latitude();
         }
-        if (coords.latitude() < globals.min_lat) {
-            globals.min_lat = coords.latitude();
+        if (coords.latitude() < min_lat) {
+            min_lat = coords.latitude();
         }
-        if (coords.longitude() > globals.max_lon) {
-            globals.max_lon = coords.longitude();
+        if (coords.longitude() > max_lon) {
+            max_lon = coords.longitude();
         }
-        if (coords.longitude() < globals.min_lon) {
-            globals.min_lon = coords.longitude();
+        if (coords.longitude() < min_lon) {
+            min_lon = coords.longitude();
         }
     }
 
-
-    return ((globals.min_lat + globals.max_lat)/2) * kDegreeToRadian;
+    // Return average latitude in radians
+    return ((min_lat + max_lat)/2) * coords::kDegreeToRadian;
 }

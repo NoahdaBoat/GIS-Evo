@@ -22,12 +22,8 @@
 #include <string>
 #include <vector>
 #include <fstream>
-#include "globals.h"
-#include "ms1helpers.h"
-#include "ms2helpers.hpp"
-#include "../Coordinates_Converstions/coords_conversions.hpp"
-#include "m4.h"
-#include "ms4helpers.hpp"
+#include "../src/courier/courier_types.hpp"
+#include "../src/binary_loader/binary_database.hpp"
 
 //Program exit codes
 constexpr int SUCCESS_EXIT_CODE = 0;        //Everyting went OK

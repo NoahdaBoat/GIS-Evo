@@ -27,7 +27,7 @@
  */
 
 // Note: Node and Intersection mean the same thing here
-std::vector<StreetSegmentIdx> aStarAlgorithm(int start_id, int end_id, int turn_penalty) {
+std::vector<StreetSegmentIdx> aStarAlgorithm(IntersectionIdx start_id, IntersectionIdx end_id, double turn_penalty) {
 
     // vector for our path of nodes
     std::vector<StreetSegmentIdx> route_elements;
@@ -79,12 +79,12 @@ std::vector<StreetSegmentIdx> aStarAlgorithm(int start_id, int end_id, int turn_
 
         visited[current_elm_id].visited = true;
 
-        if (current_elm_id == end_id) {
+        if (static_cast<IntersectionIdx>(current_elm_id) == end_id) {
             found_end = true;
             int current_inter = end_id;
             int next_inter;
 
-            while (visited[current_inter].node_id != -1) {
+            while (static_cast<IntersectionIdx>(visited[current_inter].node_id) != static_cast<IntersectionIdx>(-1)) {
                 route_elements.push_back(visited[current_inter].edge_id);
                 next_inter = visited[current_inter].node_id;
                 current_inter = next_inter;
@@ -106,7 +106,7 @@ std::vector<StreetSegmentIdx> aStarAlgorithm(int start_id, int end_id, int turn_
                 // if the current node is at from, then the next node is at to
                 // if the current node is at to, and it's not a one way street, then the next node is at from
 
-                if (current_elm_id == globals.all_street_segments[i].from) {
+                if (static_cast<IntersectionIdx>(current_elm_id) == globals.all_street_segments[i].from) {
                     next_intersection = globals.all_street_segments[i].to;
                 } else if (!globals.all_street_segments[i].oneWay) {
                     next_intersection = globals.all_street_segments[i].from;

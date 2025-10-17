@@ -7,8 +7,6 @@
 #include <gtk/gtk.h>
 #include <vector>
 #include <string>
-#include "m1.h"
-#include "../ms1helpers.h"
 #include "../gtk4_types.hpp"
 #include "OSMDatabaseAPI.h"
 
