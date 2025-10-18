@@ -1,46 +1,14 @@
 #pragma once
 
-#include <vector>
 #include <algorithm>
-#include <cmath>
+#include <vector>
+
+#include "../include/bounding_box.hpp"
 
 namespace gisevo {
 
-// Simple bounding box structure
-struct BoundingBox {
-    double min_x, min_y, max_x, max_y;
-    
-    BoundingBox() : min_x(0), min_y(0), max_x(0), max_y(0) {}
-    BoundingBox(double min_x, double min_y, double max_x, double max_y) 
-        : min_x(min_x), min_y(min_y), max_x(max_x), max_y(max_y) {}
-    
-    // Check if this bounding box intersects with another
-    bool intersects(const BoundingBox& other) const {
-        return !(max_x < other.min_x || min_x > other.max_x ||
-                 max_y < other.min_y || min_y > other.max_y);
-    }
-    
-    // Check if this bounding box contains a point
-    bool contains(double x, double y) const {
-        return x >= min_x && x <= max_x && y >= min_y && y <= max_y;
-    }
-    
-    // Expand this bounding box to include another
-    void expand(const BoundingBox& other) {
-        min_x = std::min(min_x, other.min_x);
-        min_y = std::min(min_y, other.min_y);
-        max_x = std::max(max_x, other.max_x);
-        max_y = std::max(max_y, other.max_y);
-    }
-    
-    // Calculate area
-    double area() const {
-        return (max_x - min_x) * (max_y - min_y);
-    }
-};
-
 // Simple spatial index using a vector of items with bounding boxes
-template<typename T>
+template <typename T>
 class SimpleSpatialIndex {
 private:
     struct IndexItem {
@@ -147,9 +115,5 @@ public:
         return stats;
     }
 };
-
-// Use the simple spatial index as our R-tree for now
-template<typename T>
-using RTree = SimpleSpatialIndex<T>;
 
 } // namespace gisevo

@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "../spatial_hash/simple_spatial_index.hpp"
+#include "../spatial_hash/rtree.hpp"
 
 namespace gisevo {
 
@@ -145,7 +145,7 @@ public:
     LatLon get_street_segment_curve_point(std::size_t curve_point_num, std::size_t street_segment_idx) const;
 
 private:
-    BinaryDatabase() = default;
+    BinaryDatabase();
     
     std::vector<Node> nodes_;
     std::vector<StreetSegment> segments_;

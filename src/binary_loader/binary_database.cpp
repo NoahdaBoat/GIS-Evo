@@ -13,6 +13,27 @@ BinaryDatabase& BinaryDatabase::instance() {
     return instance;
 }
 
+namespace {
+
+RTree<std::size_t>::Options make_spatial_options() {
+    RTree<std::size_t>::Options opts;
+    opts.enable_spatial_clustering = true;
+    opts.enable_query_cache = true;
+    opts.enable_memory_pool = true;
+    opts.enable_space_filling_sort = true;
+    opts.cache_capacity = 1024;
+    opts.cache_quantization = 1e-5;
+    return opts;
+}
+
+} // namespace
+
+BinaryDatabase::BinaryDatabase()
+    : street_rtree_(make_spatial_options())
+    , intersection_rtree_(make_spatial_options())
+    , poi_rtree_(make_spatial_options())
+    , feature_rtree_(make_spatial_options()) {}
+
 template <typename T>
 T read_pod(std::ifstream& in) {
     T value;
@@ -751,78 +772,97 @@ void BinaryDatabase::build_indexes() {
 
 void BinaryDatabase::build_spatial_indexes() {
     // Build street segment spatial index
-    street_rtree_.clear();
+    std::vector<std::pair<std::size_t, BoundingBox>> street_entries;
+    street_entries.reserve(segments_.size());
     for (std::size_t i = 0; i < segments_.size(); ++i) {
         const auto& seg = segments_[i];
-        if (seg.node_refs.size() >= 2) {
-            // Get bounding box of street segment
-            auto from_it = node_id_to_index_.find(seg.node_refs.front());
-            auto to_it = node_id_to_index_.find(seg.node_refs.back());
-            
-            if (from_it != node_id_to_index_.end() && to_it != node_id_to_index_.end()) {
-                const auto& from_node = nodes_[from_it->second];
-                const auto& to_node = nodes_[to_it->second];
-                
-                BoundingBox bounds(
-                    std::min(from_node.lon, to_node.lon),
-                    std::min(from_node.lat, to_node.lat),
-                    std::max(from_node.lon, to_node.lon),
-                    std::max(from_node.lat, to_node.lat)
-                );
-                
-                street_rtree_.insert(i, bounds);
-            }
+        if (seg.node_refs.size() < 2) {
+            continue;
         }
+
+        auto from_it = node_id_to_index_.find(seg.node_refs.front());
+        auto to_it = node_id_to_index_.find(seg.node_refs.back());
+        if (from_it == node_id_to_index_.end() || to_it == node_id_to_index_.end()) {
+            continue;
+        }
+
+        const auto& from_node = nodes_[from_it->second];
+        const auto& to_node = nodes_[to_it->second];
+
+        BoundingBox bounds(
+            std::min(from_node.lon, to_node.lon),
+            std::min(from_node.lat, to_node.lat),
+            std::max(from_node.lon, to_node.lon),
+            std::max(from_node.lat, to_node.lat)
+        );
+
+        street_entries.emplace_back(i, bounds);
     }
-    
+    street_rtree_.bulk_load(std::move(street_entries));
+
     // Build intersection R-tree
-    intersection_rtree_.clear();
+    std::vector<std::pair<std::size_t, BoundingBox>> intersection_entries;
+    intersection_entries.reserve(intersection_node_ids_.size());
     for (std::size_t i = 0; i < intersection_node_ids_.size(); ++i) {
         OSMID node_id = intersection_node_ids_[i];
         auto it = node_id_to_index_.find(node_id);
-        if (it != node_id_to_index_.end()) {
-            const auto& node = nodes_[it->second];
-            BoundingBox bounds(node.lon, node.lat, node.lon, node.lat);
-            intersection_rtree_.insert(i, bounds);
+        if (it == node_id_to_index_.end()) {
+            continue;
         }
+
+        const auto& node = nodes_[it->second];
+        BoundingBox bounds(node.lon, node.lat, node.lon, node.lat);
+        intersection_entries.emplace_back(i, bounds);
     }
-    
+    intersection_rtree_.bulk_load(std::move(intersection_entries));
+
     // Build POI R-tree
-    poi_rtree_.clear();
+    std::vector<std::pair<std::size_t, BoundingBox>> poi_entries;
+    poi_entries.reserve(pois_.size());
     for (std::size_t i = 0; i < pois_.size(); ++i) {
         const auto& poi = pois_[i];
         BoundingBox bounds(poi.lon, poi.lat, poi.lon, poi.lat);
-        poi_rtree_.insert(i, bounds);
+        poi_entries.emplace_back(i, bounds);
     }
-    
+    poi_rtree_.bulk_load(std::move(poi_entries));
+
     // Build feature R-tree
-    feature_rtree_.clear();
+    std::vector<std::pair<std::size_t, BoundingBox>> feature_entries;
+    feature_entries.reserve(features_.size());
     for (std::size_t i = 0; i < features_.size(); ++i) {
         const auto& feature = features_[i];
-        if (feature.node_refs.size() >= 2) {
-            // Calculate bounding box of feature
-            double min_lon = std::numeric_limits<double>::max();
-            double min_lat = std::numeric_limits<double>::max();
-            double max_lon = std::numeric_limits<double>::lowest();
-            double max_lat = std::numeric_limits<double>::lowest();
-            
-            for (OSMID node_id : feature.node_refs) {
-                auto it = node_id_to_index_.find(node_id);
-                if (it != node_id_to_index_.end()) {
-                    const auto& node = nodes_[it->second];
-                    min_lon = std::min(min_lon, node.lon);
-                    min_lat = std::min(min_lat, node.lat);
-                    max_lon = std::max(max_lon, node.lon);
-                    max_lat = std::max(max_lat, node.lat);
-                }
-            }
-            
-            if (min_lon < max_lon && min_lat < max_lat) {
-                BoundingBox bounds(min_lon, min_lat, max_lon, max_lat);
-                feature_rtree_.insert(i, bounds);
-            }
+        if (feature.node_refs.empty()) {
+            continue;
         }
+
+        double min_lon = std::numeric_limits<double>::max();
+        double min_lat = std::numeric_limits<double>::max();
+        double max_lon = std::numeric_limits<double>::lowest();
+        double max_lat = std::numeric_limits<double>::lowest();
+        bool has_node = false;
+
+        for (OSMID node_id : feature.node_refs) {
+            auto it = node_id_to_index_.find(node_id);
+            if (it == node_id_to_index_.end()) {
+                continue;
+            }
+
+            const auto& node = nodes_[it->second];
+            min_lon = std::min(min_lon, node.lon);
+            min_lat = std::min(min_lat, node.lat);
+            max_lon = std::max(max_lon, node.lon);
+            max_lat = std::max(max_lat, node.lat);
+            has_node = true;
+        }
+
+        if (!has_node) {
+            continue;
+        }
+
+        BoundingBox bounds(min_lon, min_lat, max_lon, max_lat);
+        feature_entries.emplace_back(i, bounds);
     }
+    feature_rtree_.bulk_load(std::move(feature_entries));
     
     std::cout << "R-tree sizes: streets=" << street_rtree_.size() 
               << ", intersections=" << intersection_rtree_.size()

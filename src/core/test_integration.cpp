@@ -7,8 +7,8 @@ int main() {
     // Test data loading
     gisevo::core::MapData map_data;
     
-    std::string streets_path = "../../resources/maps/ontario.streets.bin";
-    std::string osm_path = "../../resources/maps/ontario.osm.bin";
+    std::string streets_path = "resources/maps/ontario.streets.bin";
+    std::string osm_path = "resources/maps/ontario.osm.bin";
     
     std::cout << "Loading data from binary files..." << std::endl;
     bool loaded = map_data.load_from_binary(streets_path, osm_path);

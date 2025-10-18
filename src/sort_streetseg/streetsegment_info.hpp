@@ -81,3 +81,6 @@ void set_colour_of_street(RoadType type, int idx);
 
 void compute_streets_info();
 
+// Access function for street segments (replaces globals.all_street_segments)
+const std::vector<street_segment_info>& get_all_street_segments();
+

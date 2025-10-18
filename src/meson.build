@@ -18,32 +18,29 @@ core_sources = files(
   'binary_loader/binary_database.cpp',
   'external_api_impl.cpp',
   
-  # Coordinate conversions - temporarily disabled due to m1.h dependencies
-  # 'Coordinates_Converstions/convert_coords.cpp',
-  # 'Coordinates_Converstions/get_zoom_level.cpp',
-  # 'Coordinates_Converstions/map_bounds.cpp',
+  # Coordinate conversions - dependencies fixed in Task 0.1
+  'Coordinates_Converstions/convert_coords.cpp',
+  'Coordinates_Converstions/get_zoom_level.cpp',
+  'Coordinates_Converstions/map_bounds.cpp',
   
-  # Intersections - temporarily disabled due to ms1helpers.h dependencies
-  # 'Intersections/intersection_setup.cpp',
-  # 'Intersections/roadcolour.cpp',
+  # Intersections - dependencies fixed in Task 0.2
+  'Intersections/intersection_setup.cpp',
+  'Intersections/roadcolour.cpp',
   
-  # POI (Point of Interest) - temporarily disabled due to struct.h dependencies
-  # 'POI/POI_helpers.cpp',
-  # 'POI/POI_setup.cpp',
+  # POI (Point of Interest) - dependencies fixed in Task 0.3
+  'POI/POI_helpers.cpp',
+  'POI/POI_setup.cpp',
   
-  # OSM Entity Helpers - temporarily disabled due to m1.h dependencies
-  # 'OSMEntity_Helpers/m2_way_helpers.cpp',
-  # 'OSMEntity_Helpers/sort_features.cpp',
-  # 'OSMEntity_Helpers/typed_osmid_helper.cpp',
+  # OSM Entity Helpers - dependencies fixed in Task 0.4
+  'OSMEntity_Helpers/m2_way_helpers.cpp',
+  'OSMEntity_Helpers/sort_features.cpp',
+  'OSMEntity_Helpers/typed_osmid_helper.cpp',
   
-  # Street segments - temporarily disabled due to globals.h dependencies
-  # 'sort_streetseg/colour_streets.cpp',
+  # Street segments - dependencies fixed in Task 0.5
+  'sort_streetseg/colour_streets.cpp',
   
   # Spatial hash
   'spatial_hash/spatial_hash.cpp',
-  
-  # M3 Algorithm (OLD - to be replaced) - temporarily disabled due to m3.h dependencies
-  # 'm3_algo/astaralgo.cpp',
   
   # Pathfinding module (NEW)
   'pathfinding/astar.cpp',
@@ -83,3 +80,19 @@ rtree_test = executable('rtree_test',
 )
 
 test('rtree_spatial_index', rtree_test)
+
+benchmark_spatial_index = executable('benchmark_spatial_index',
+  'spatial_hash/benchmark_spatial_index.cpp',
+  include_directories: inc,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+rtree_validation_test = executable('rtree_validation_test',
+  'spatial_hash/rtree_validation_test.cpp',
+  include_directories: inc,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('rtree_validation', rtree_validation_test)
