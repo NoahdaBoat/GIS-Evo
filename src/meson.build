@@ -16,6 +16,7 @@ core_sources = files(
   
   # Binary loader (NEW)
   'binary_loader/binary_database.cpp',
+  'binary_loader/cache_manager.cpp',
   'external_api_impl.cpp',
   
   # Coordinate conversions - dependencies fixed in Task 0.1
@@ -96,3 +97,23 @@ rtree_validation_test = executable('rtree_validation_test',
 )
 
 test('rtree_validation', rtree_validation_test)
+
+cache_format_test = executable('cache_format_test',
+  'binary_loader/test_cache_format.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_format', cache_format_test)
+
+cache_aware_loading_test = executable('cache_aware_loading_test',
+  'binary_loader/test_cache_aware_loading.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_aware_loading', cache_aware_loading_test)

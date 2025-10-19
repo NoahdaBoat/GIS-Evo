@@ -1,16 +1,14 @@
 #pragma once
 
-#pragma once
-
-#include <memory>
-#include <optional>
 #include <string>
 #include <vector>
+#include <cstddef>
 
 #include "types.hpp"
 
 namespace gisevo {
     class BinaryDatabase;
+    class CacheManager;
 }
 
 namespace gisevo::core {

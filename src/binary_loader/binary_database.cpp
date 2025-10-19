@@ -1,10 +1,12 @@
 #include "binary_database.hpp"
+#include "cache_manager.hpp"
 #include <fstream>
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
 #include <iostream>
 #include <chrono>
+#include <filesystem>
 
 namespace gisevo {
 
@@ -409,6 +411,68 @@ bool BinaryDatabase::load_osm_file(const std::string& path) {
     }
 }
 
+bool BinaryDatabase::load_with_cache(const std::string& streets_path,
+                                     const std::string& osm_path,
+                                     const std::string& cache_path,
+                                     CacheManager& cache_manager) {
+    const auto validation = cache_manager.validate_cache(cache_path, streets_path, osm_path);
+
+    if (validation.valid) {
+        if (load_from_cache(cache_path, cache_manager)) {
+            return true;
+        }
+        std::cerr << "Cache load failed, falling back to binary load" << std::endl;
+    } else if (validation.exists) {
+        std::cerr << "Cache invalid: " << validation.reason << std::endl;
+    }
+
+    if (!load_streets_file(streets_path)) {
+        return false;
+    }
+
+    if (!load_osm_file(osm_path)) {
+        return false;
+    }
+
+    const auto streets_checksum = cache_manager.compute_file_checksum(streets_path);
+    const auto osm_checksum = cache_manager.compute_file_checksum(osm_path);
+    
+    if (!save_to_cache(cache_path, cache_manager, streets_checksum, osm_checksum)) {
+        std::cerr << "Failed to save cache" << std::endl;
+    }
+
+    return true;
+}
+
+bool BinaryDatabase::load_from_cache(const std::string& cache_path,
+                                     CacheManager& cache_manager) {
+    clear();
+    return cache_manager.load_cache(cache_path, *this);
+}
+
+bool BinaryDatabase::save_to_cache(const std::string& cache_path,
+                                   CacheManager& cache_manager,
+                                   const std::string& streets_checksum,
+                                   const std::string& osm_checksum) const {
+    return cache_manager.save_cache(cache_path, *this, streets_checksum, osm_checksum);
+}
+
+bool BinaryDatabase::load_with_cache(const std::string& streets_path,
+                                     const std::string& osm_path) {
+    CacheManager cache_manager;
+    const std::string cache_path = generate_cache_path(streets_path, osm_path);
+    return load_with_cache(streets_path, osm_path, cache_path, cache_manager);
+}
+
+std::string BinaryDatabase::generate_cache_path(const std::string& streets_path, const std::string& osm_path) const {
+    // Generate cache path based on the streets file path
+    // Replace the streets file extension with .gisevo.cache
+    std::filesystem::path streets_file_path(streets_path);
+    std::filesystem::path cache_path = streets_file_path.parent_path() / 
+                                      (streets_file_path.stem().string() + ".gisevo.cache");
+    return cache_path.string();
+}
+
 // Fallback stream-based OSM loading for compatibility
 bool BinaryDatabase::load_osm_file_stream(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
@@ -662,6 +726,13 @@ std::string BinaryDatabase::get_poi_type(std::size_t idx) const {
         return "";
     }
     return pois_[idx].category;
+}
+
+OSMID BinaryDatabase::get_poi_osm_id(std::size_t idx) const {
+    if (idx >= pois_.size()) {
+        return 0;
+    }
+    return pois_[idx].osm_id;
 }
 
 unsigned BinaryDatabase::get_intersection_street_segment_count(std::size_t intersection_idx) const {
@@ -1004,6 +1075,78 @@ LatLon BinaryDatabase::get_street_segment_curve_point(std::size_t curve_point_nu
     
     const Node& node = nodes_[it->second];
     return LatLon(node.lat, node.lon);
+}
+
+// Cache serialization support methods
+void BinaryDatabase::set_map_bounds(double min_lat, double max_lat, double min_lon, double max_lon, double avg_lat_rad) {
+    min_lat_ = min_lat;
+    max_lat_ = max_lat;
+    min_lon_ = min_lon;
+    max_lon_ = max_lon;
+    avg_lat_rad_ = avg_lat_rad;
+}
+
+void BinaryDatabase::add_node(const Node& node) {
+    nodes_.push_back(node);
+    node_id_to_index_[node.osm_id] = nodes_.size() - 1;
+}
+
+void BinaryDatabase::add_segment(const StreetSegment& segment) {
+    segments_.push_back(segment);
+    way_id_to_segment_index_[segment.osm_id] = segments_.size() - 1;
+}
+
+void BinaryDatabase::add_poi(const POI& poi) {
+    pois_.push_back(poi);
+}
+
+void BinaryDatabase::add_feature(const Feature& feature) {
+    features_.push_back(feature);
+}
+
+void BinaryDatabase::add_relation(const Relation& relation) {
+    relations_.push_back(relation);
+    relation_id_to_index_[relation.osm_id] = relations_.size() - 1;
+}
+
+void BinaryDatabase::set_lookup_maps(const std::unordered_map<OSMID, std::size_t>& node_map,
+                                    const std::unordered_map<OSMID, std::size_t>& way_map,
+                                    const std::unordered_map<OSMID, std::size_t>& relation_map,
+                                    const std::unordered_map<std::string, std::size_t>& street_map) {
+    node_id_to_index_ = node_map;
+    way_id_to_segment_index_ = way_map;
+    relation_id_to_index_ = relation_map;
+    street_name_to_id_ = street_map;
+}
+
+void BinaryDatabase::set_intersection_data(const std::vector<std::vector<std::size_t>>& intersection_segments,
+                                         const std::vector<OSMID>& intersection_node_ids) {
+    intersection_segments_ = intersection_segments;
+    intersection_node_ids_ = intersection_node_ids;
+}
+
+void BinaryDatabase::rebuild_spatial_indexes() {
+    build_spatial_indexes();
+}
+
+void BinaryDatabase::deserialize_street_rtree(std::istream& in) {
+    street_rtree_.clear();
+    street_rtree_.deserialize(in);
+}
+
+void BinaryDatabase::deserialize_intersection_rtree(std::istream& in) {
+    intersection_rtree_.clear();
+    intersection_rtree_.deserialize(in);
+}
+
+void BinaryDatabase::deserialize_poi_rtree(std::istream& in) {
+    poi_rtree_.clear();
+    poi_rtree_.deserialize(in);
+}
+
+void BinaryDatabase::deserialize_feature_rtree(std::istream& in) {
+    feature_rtree_.clear();
+    feature_rtree_.deserialize(in);
 }
 
 } // namespace gisevo

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "StreetsDatabaseAPI.h"
-#include "OSMDatabaseAPI.h"
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -12,8 +11,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "../spatial_hash/rtree.hpp"
+#include "cache_manager.hpp"
 
 namespace gisevo {
+
+class CacheManager;
 
 // In-memory representation of loaded map data
 class BinaryDatabase {
@@ -68,6 +70,22 @@ public:
     bool load_streets_file(const std::string& path);
     bool load_osm_file(const std::string& path);
     void clear();
+
+    bool load_with_cache(const std::string& streets_path,
+                         const std::string& osm_path,
+                         const std::string& cache_path,
+                         CacheManager& cache_manager);
+
+    bool load_with_cache(const std::string& streets_path,
+                         const std::string& osm_path);
+
+    bool load_from_cache(const std::string& cache_path,
+                         CacheManager& cache_manager);
+
+    bool save_to_cache(const std::string& cache_path,
+                       CacheManager& cache_manager,
+                       const std::string& streets_checksum,
+                       const std::string& osm_checksum) const;
     
     // Fallback stream loading for compatibility
     bool load_streets_file_stream(const std::string& path);
@@ -102,6 +120,7 @@ public:
     LatLon get_poi_position(std::size_t idx) const;
     std::string get_poi_name(std::size_t idx) const;
     std::string get_poi_type(std::size_t idx) const;
+    OSMID get_poi_osm_id(std::size_t idx) const;
     
     // Feature queries
     std::size_t get_feature_count() const { return features_.size(); }
@@ -143,6 +162,36 @@ public:
     
     // Street segment curve point function
     LatLon get_street_segment_curve_point(std::size_t curve_point_num, std::size_t street_segment_idx) const;
+    
+    // Cache serialization support methods
+    void set_map_bounds(double min_lat, double max_lat, double min_lon, double max_lon, double avg_lat_rad);
+    void add_node(const Node& node);
+    void add_segment(const StreetSegment& segment);
+    void add_poi(const POI& poi);
+    void add_feature(const Feature& feature);
+    void add_relation(const Relation& relation);
+    void set_lookup_maps(const std::unordered_map<OSMID, std::size_t>& node_map,
+                        const std::unordered_map<OSMID, std::size_t>& way_map,
+                        const std::unordered_map<OSMID, std::size_t>& relation_map,
+                        const std::unordered_map<std::string, std::size_t>& street_map);
+    void set_intersection_data(const std::vector<std::vector<std::size_t>>& intersection_segments,
+                              const std::vector<OSMID>& intersection_node_ids);
+    void rebuild_spatial_indexes();
+    
+    // Cache path generation
+    std::string generate_cache_path(const std::string& streets_path, const std::string& osm_path) const;
+    
+    // R-tree accessors for cache serialization
+    const RTree<std::size_t>& get_street_rtree() const { return street_rtree_; }
+    const RTree<std::size_t>& get_intersection_rtree() const { return intersection_rtree_; }
+    const RTree<std::size_t>& get_poi_rtree() const { return poi_rtree_; }
+    const RTree<std::size_t>& get_feature_rtree() const { return feature_rtree_; }
+    
+    // R-tree setters for cache deserialization
+    void deserialize_street_rtree(std::istream& in);
+    void deserialize_intersection_rtree(std::istream& in);
+    void deserialize_poi_rtree(std::istream& in);
+    void deserialize_feature_rtree(std::istream& in);
 
 private:
     BinaryDatabase();

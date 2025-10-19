@@ -23,15 +23,11 @@ bool MapData::load_from_binary(const std::string& streets_path, const std::strin
     auto& database = db();
     database.clear();
 
-    success_ = database.load_streets_file(streets_path);
-    if (!success_) {
-        std::cerr << "Failed to load streets file: " << streets_path << std::endl;
-        return false;
-    }
+    const auto cache_path = streets_path + ".gisevo.cache";
+    CacheManager cache_manager;
 
-    success_ = database.load_osm_file(osm_path);
-    if (!success_) {
-        std::cerr << "Failed to load OSM file: " << osm_path << std::endl;
+    if (!database.load_with_cache(streets_path, osm_path, cache_path, cache_manager)) {
+        std::cerr << "Failed to load map data with cache" << std::endl;
         database.clear();
         return false;
     }

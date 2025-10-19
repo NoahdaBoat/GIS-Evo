@@ -20,6 +20,7 @@ core_sources = files(
   'main.cpp',
   # Include binary loader for data loading
   '../binary_loader/binary_database.cpp',
+  '../binary_loader/cache_manager.cpp',
   '../external_api_impl.cpp',
   '../spatial_hash/spatial_hash.cpp'
 )
@@ -34,7 +35,14 @@ executable('gis-evo-clean',
 
 # Create integration test executable
 executable('test-integration',
-  files('test_integration.cpp', 'map_data.cpp', '../binary_loader/binary_database.cpp', '../external_api_impl.cpp', '../spatial_hash/spatial_hash.cpp'),
+  files('test_integration.cpp', 'map_data.cpp', '../binary_loader/binary_database.cpp', '../binary_loader/cache_manager.cpp', '../external_api_impl.cpp', '../spatial_hash/spatial_hash.cpp'),
+  include_directories: inc,
+  dependencies: [gtk_dep, cairo_dep, threads_dep],
+  cpp_args: ['-std=c++17', '-Wall', '-Wextra'],
+  install: false)
+
+executable('test-performance-regression',
+  files('test_performance_regression.cpp', 'map_data.cpp', '../binary_loader/binary_database.cpp', '../binary_loader/cache_manager.cpp', '../external_api_impl.cpp', '../spatial_hash/spatial_hash.cpp'),
   include_directories: inc,
   dependencies: [gtk_dep, cairo_dep, threads_dep],
   cpp_args: ['-std=c++17', '-Wall', '-Wextra'],
@@ -42,7 +50,7 @@ executable('test-integration',
 
 # Create simple test executable
 executable('test-simple',
-  files('test_simple.cpp', 'map_data.cpp', '../binary_loader/binary_database.cpp', '../external_api_impl.cpp', '../spatial_hash/spatial_hash.cpp'),
+  files('test_simple.cpp', 'map_data.cpp', '../binary_loader/binary_database.cpp', '../binary_loader/cache_manager.cpp', '../external_api_impl.cpp', '../spatial_hash/spatial_hash.cpp'),
   include_directories: inc,
   dependencies: [gtk_dep, cairo_dep, threads_dep],
   cpp_args: ['-std=c++17', '-Wall', '-Wextra'],
@@ -50,7 +58,15 @@ executable('test-simple',
 
 # Create feature test executable
 executable('test-features',
-  files('test_features.cpp', '../binary_loader/binary_database.cpp', '../external_api_impl.cpp'),
+  files('test_features.cpp', '../binary_loader/binary_database.cpp', '../binary_loader/cache_manager.cpp', '../external_api_impl.cpp'),
+  include_directories: inc,
+  dependencies: [gtk_dep, cairo_dep, threads_dep],
+  cpp_args: ['-std=c++17', '-Wall', '-Wextra'],
+  install: false)
+
+# Create cache debug test executable
+executable('test-cache-debug',
+  files('test_cache_debug.cpp', '../binary_loader/binary_database.cpp', '../binary_loader/cache_manager.cpp', '../external_api_impl.cpp', '../spatial_hash/spatial_hash.cpp'),
   include_directories: inc,
   dependencies: [gtk_dep, cairo_dep, threads_dep],
   cpp_args: ['-std=c++17', '-Wall', '-Wextra'],
@@ -63,6 +79,7 @@ core_lib = library('gisevo-core-clean',
     'renderer.cpp',
     'ui.cpp',
     '../binary_loader/binary_database.cpp',
+    '../binary_loader/cache_manager.cpp',
     '../external_api_impl.cpp',
     '../spatial_hash/spatial_hash.cpp'
   ),

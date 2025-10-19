@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <list>
 #include <memory>
@@ -38,6 +39,10 @@ public:
     void clear();
     [[nodiscard]] std::size_t size() const;
 
+    // Serialization methods
+    void serialize(std::ostream& out) const;
+    void deserialize(std::istream& in);
+
     [[nodiscard]] const Options& options() const noexcept { return options_; }
 
 private:
@@ -52,6 +57,10 @@ private:
     static constexpr std::size_t kMaxItems = 64;
     static constexpr std::size_t kMinItems = 16;
     static constexpr double kEpsilon = 1e-9;
+    
+    // Serialization version constants
+    static constexpr std::uint32_t kSerializationVersion = 1;
+    static constexpr const char* kSerializationMagic = "RTREE1";
 
     template <typename Container, typename Projection>
     static void sort_by_best_axis(Container& container, Projection projection);
@@ -79,6 +88,16 @@ private:
 
     NodePtr create_node(bool leaf);
     void release_node(Node* node);
+
+    // Serialization helper methods
+    void serialize_node(std::ostream& out, const Node* node) const;
+    void deserialize_node(std::istream& in, Node* node);
+    void serialize_bounding_box(std::ostream& out, const BoundingBox& bounds) const;
+    void deserialize_bounding_box(std::istream& in, BoundingBox& bounds);
+    void serialize_item(std::ostream& out, const Item& item) const;
+    void deserialize_item(std::istream& in, Item& item);
+    void serialize_vector_size(std::ostream& out, std::size_t size) const;
+    void deserialize_vector_size(std::istream& in, std::size_t& size);
 
     struct Item {
         T data;
@@ -268,7 +287,10 @@ private:
             std::int64_t max_x;
             std::int64_t max_y;
 
-            bool operator==(const CacheKey&) const = default;
+            bool operator==(const CacheKey& other) const {
+                return min_x == other.min_x && min_y == other.min_y &&
+                       max_x == other.max_x && max_y == other.max_y;
+            }
         };
 
         struct Entry {
@@ -832,6 +854,175 @@ void RTree<T>::release_node(Node* node) {
         return;
     }
     pool_->release(node);
+}
+
+// Serialization method implementations
+template <typename T>
+void RTree<T>::serialize(std::ostream& out) const {
+    // Write magic and version
+    out.write(kSerializationMagic, 6);
+    out.write(reinterpret_cast<const char*>(&kSerializationVersion), sizeof(kSerializationVersion));
+    
+    // Write options
+    out.write(reinterpret_cast<const char*>(&options_.enable_spatial_clustering), sizeof(options_.enable_spatial_clustering));
+    out.write(reinterpret_cast<const char*>(&options_.enable_query_cache), sizeof(options_.enable_query_cache));
+    out.write(reinterpret_cast<const char*>(&options_.enable_memory_pool), sizeof(options_.enable_memory_pool));
+    out.write(reinterpret_cast<const char*>(&options_.enable_space_filling_sort), sizeof(options_.enable_space_filling_sort));
+    out.write(reinterpret_cast<const char*>(&options_.cache_capacity), sizeof(options_.cache_capacity));
+    out.write(reinterpret_cast<const char*>(&options_.cache_quantization), sizeof(options_.cache_quantization));
+    
+    // Serialize the tree structure
+    serialize_node(out, root_.get());
+}
+
+template <typename T>
+void RTree<T>::deserialize(std::istream& in) {
+    // Clear existing data
+    clear();
+    
+    // Read magic and version
+    char magic[6];
+    in.read(magic, 6);
+    if (std::string(magic, 6) != kSerializationMagic) {
+        throw std::runtime_error("Invalid R-tree serialization magic");
+    }
+    
+    std::uint32_t version;
+    in.read(reinterpret_cast<char*>(&version), sizeof(version));
+    if (version != kSerializationVersion) {
+        throw std::runtime_error("Unsupported R-tree serialization version");
+    }
+    
+    // Read options
+    in.read(reinterpret_cast<char*>(&options_.enable_spatial_clustering), sizeof(options_.enable_spatial_clustering));
+    in.read(reinterpret_cast<char*>(&options_.enable_query_cache), sizeof(options_.enable_query_cache));
+    in.read(reinterpret_cast<char*>(&options_.enable_memory_pool), sizeof(options_.enable_memory_pool));
+    in.read(reinterpret_cast<char*>(&options_.enable_space_filling_sort), sizeof(options_.enable_space_filling_sort));
+    in.read(reinterpret_cast<char*>(&options_.cache_capacity), sizeof(options_.cache_capacity));
+    in.read(reinterpret_cast<char*>(&options_.cache_quantization), sizeof(options_.cache_quantization));
+    
+    // Recreate pool and cache with new options
+    pool_ = std::make_unique<NodePool>(options_.enable_memory_pool);
+    cache_ = options_.enable_query_cache
+        ? std::make_unique<QueryCache>(true, options_.cache_capacity, options_.cache_quantization)
+        : nullptr;
+    
+    // Deserialize the tree structure
+    root_ = create_node(true); // Will be updated by deserialize_node
+    deserialize_node(in, root_.get());
+}
+
+template <typename T>
+void RTree<T>::serialize_node(std::ostream& out, const Node* node) const {
+    if (!node) {
+        // Write null marker
+        const bool is_null = true;
+        out.write(reinterpret_cast<const char*>(&is_null), sizeof(is_null));
+        return;
+    }
+    
+    // Write null marker (false)
+    const bool is_null = false;
+    out.write(reinterpret_cast<const char*>(&is_null), sizeof(is_null));
+    
+    // Write node properties
+    out.write(reinterpret_cast<const char*>(&node->is_leaf), sizeof(node->is_leaf));
+    serialize_bounding_box(out, node->bounds);
+    
+    if (node->is_leaf) {
+        // Serialize items
+        serialize_vector_size(out, node->items.size());
+        for (const auto& item : node->items) {
+            serialize_item(out, item);
+        }
+    } else {
+        // Serialize children
+        serialize_vector_size(out, node->children.size());
+        for (const auto& child : node->children) {
+            serialize_node(out, child.get());
+        }
+    }
+}
+
+template <typename T>
+void RTree<T>::deserialize_node(std::istream& in, Node* node) {
+    // Read null marker
+    bool is_null;
+    in.read(reinterpret_cast<char*>(&is_null), sizeof(is_null));
+    if (is_null) {
+        return;
+    }
+    
+    // Read node properties
+    in.read(reinterpret_cast<char*>(&node->is_leaf), sizeof(node->is_leaf));
+    deserialize_bounding_box(in, node->bounds);
+    
+    if (node->is_leaf) {
+        // Deserialize items
+        std::size_t item_count;
+        deserialize_vector_size(in, item_count);
+        node->items.reserve(item_count);
+        
+        for (std::size_t i = 0; i < item_count; ++i) {
+            Item item(T{}, BoundingBox{});
+            deserialize_item(in, item);
+            node->items.push_back(std::move(item));
+        }
+    } else {
+        // Deserialize children
+        std::size_t child_count;
+        deserialize_vector_size(in, child_count);
+        node->children.reserve(child_count);
+        
+        for (std::size_t i = 0; i < child_count; ++i) {
+            NodePtr child = create_node(true); // Will be updated by deserialize_node
+            deserialize_node(in, child.get());
+            node->children.push_back(std::move(child));
+        }
+    }
+}
+
+template <typename T>
+void RTree<T>::serialize_bounding_box(std::ostream& out, const BoundingBox& bounds) const {
+    out.write(reinterpret_cast<const char*>(&bounds.min_x), sizeof(bounds.min_x));
+    out.write(reinterpret_cast<const char*>(&bounds.min_y), sizeof(bounds.min_y));
+    out.write(reinterpret_cast<const char*>(&bounds.max_x), sizeof(bounds.max_x));
+    out.write(reinterpret_cast<const char*>(&bounds.max_y), sizeof(bounds.max_y));
+}
+
+template <typename T>
+void RTree<T>::deserialize_bounding_box(std::istream& in, BoundingBox& bounds) {
+    in.read(reinterpret_cast<char*>(&bounds.min_x), sizeof(bounds.min_x));
+    in.read(reinterpret_cast<char*>(&bounds.min_y), sizeof(bounds.min_y));
+    in.read(reinterpret_cast<char*>(&bounds.max_x), sizeof(bounds.max_x));
+    in.read(reinterpret_cast<char*>(&bounds.max_y), sizeof(bounds.max_y));
+}
+
+template <typename T>
+void RTree<T>::serialize_item(std::ostream& out, const Item& item) const {
+    // Serialize the data (T type)
+    out.write(reinterpret_cast<const char*>(&item.data), sizeof(item.data));
+    serialize_bounding_box(out, item.bounds);
+}
+
+template <typename T>
+void RTree<T>::deserialize_item(std::istream& in, Item& item) {
+    // Deserialize the data (T type)
+    in.read(reinterpret_cast<char*>(&item.data), sizeof(item.data));
+    deserialize_bounding_box(in, item.bounds);
+}
+
+template <typename T>
+void RTree<T>::serialize_vector_size(std::ostream& out, std::size_t size) const {
+    const std::uint64_t size_64 = static_cast<std::uint64_t>(size);
+    out.write(reinterpret_cast<const char*>(&size_64), sizeof(size_64));
+}
+
+template <typename T>
+void RTree<T>::deserialize_vector_size(std::istream& in, std::size_t& size) {
+    std::uint64_t size_64;
+    in.read(reinterpret_cast<char*>(&size_64), sizeof(size_64));
+    size = static_cast<std::size_t>(size_64);
 }
 
 } // namespace gisevo
