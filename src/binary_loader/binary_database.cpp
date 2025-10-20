@@ -421,9 +421,43 @@ bool BinaryDatabase::load_with_cache(const std::string& streets_path,
         if (load_from_cache(cache_path, cache_manager)) {
             return true;
         }
+        
+        // Enhanced error handling for cache load failure
+        const auto& config = cache_manager.get_error_handling_config();
+        if (config.enable_auto_recovery) {
+            std::cerr << "Cache load failed, attempting recovery..." << std::endl;
+            if (cache_manager.attempt_cache_recovery(cache_path, *this)) {
+                std::cerr << "Cache recovery successful" << std::endl;
+                return true;
+            }
+        }
+        
         std::cerr << "Cache load failed, falling back to binary load" << std::endl;
     } else if (validation.exists) {
-        std::cerr << "Cache invalid: " << validation.reason << std::endl;
+        std::cerr << "Cache invalid: " << validation.reason;
+        if (!validation.detailed_error.empty()) {
+            std::cerr << " (" << validation.detailed_error << ")";
+        }
+        std::cerr << std::endl;
+        
+        // Handle specific error types
+        const auto& config = cache_manager.get_error_handling_config();
+        if (config.enable_cache_cleanup) {
+            switch (validation.error_type) {
+                case CacheManager::ValidationResult::ErrorType::FileCorrupted:
+                case CacheManager::ValidationResult::ErrorType::VersionMismatch:
+                    std::cerr << "Deleting corrupted cache file..." << std::endl;
+                    cache_manager.delete_cache(cache_path);
+                    break;
+                case CacheManager::ValidationResult::ErrorType::ChecksumMismatch:
+                    std::cerr << "Source files changed, cache will be regenerated" << std::endl;
+                    break;
+                default:
+                    break;
+            }
+        }
+    } else {
+        std::cerr << "Cache file not found, will create new cache" << std::endl;
     }
 
     if (!load_streets_file(streets_path)) {
@@ -434,11 +468,17 @@ bool BinaryDatabase::load_with_cache(const std::string& streets_path,
         return false;
     }
 
+    // Build spatial indexes
+    build_spatial_indexes();
+
+    // Save cache for next time
     const auto streets_checksum = cache_manager.compute_file_checksum(streets_path);
     const auto osm_checksum = cache_manager.compute_file_checksum(osm_path);
     
     if (!save_to_cache(cache_path, cache_manager, streets_checksum, osm_checksum)) {
-        std::cerr << "Failed to save cache" << std::endl;
+        std::cerr << "Failed to save cache (non-critical)" << std::endl;
+    } else {
+        std::cerr << "Cache saved successfully" << std::endl;
     }
 
     return true;
@@ -459,7 +499,18 @@ bool BinaryDatabase::save_to_cache(const std::string& cache_path,
 
 bool BinaryDatabase::load_with_cache(const std::string& streets_path,
                                      const std::string& osm_path) {
-    CacheManager cache_manager;
+    // Create CacheManager with default error handling configuration
+    CacheManager::ErrorHandlingConfig config;
+    config.enable_auto_recovery = true;
+    config.enable_corruption_detection = true;
+    config.enable_version_validation = true;
+    config.enable_checksum_validation = true;
+    config.enable_fallback_loading = true;
+    config.enable_cache_cleanup = true;
+    config.max_retry_attempts = 3;
+    config.corruption_threshold_bytes = 1024;
+    
+    CacheManager cache_manager(config);
     const std::string cache_path = generate_cache_path(streets_path, osm_path);
     return load_with_cache(streets_path, osm_path, cache_path, cache_manager);
 }

@@ -117,3 +117,55 @@ cache_aware_loading_test = executable('cache_aware_loading_test',
 )
 
 test('cache_aware_loading', cache_aware_loading_test)
+
+cache_error_handling_test = executable('cache_error_handling_test',
+  'binary_loader/test_cache_error_handling.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_error_handling', cache_error_handling_test)
+
+# New comprehensive cache test suite for Task 7.7
+cache_manager_test = executable('cache_manager_test',
+  'binary_loader/test_cache_manager.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_manager', cache_manager_test)
+
+cache_integration_test = executable('cache_integration_test',
+  'binary_loader/test_cache_integration.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_integration', cache_integration_test)
+
+cache_performance_test = executable('cache_performance_test',
+  'binary_loader/test_cache_performance.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_performance', cache_performance_test)
+
+# Comprehensive performance validation test for Task 7.8
+cache_performance_validation_test = executable('cache_performance_validation_test',
+  'binary_loader/test_cache_performance_validation.cpp',
+  include_directories: inc,
+  link_with: gis_lib,
+  cpp_args: ['-Wno-unused-parameter', '-Wno-unused-variable'],
+  install: false
+)
+
+test('cache_performance_validation', cache_performance_validation_test)
