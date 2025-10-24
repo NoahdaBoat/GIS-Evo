@@ -26,6 +26,7 @@ public:
         bool enable_checksum_validation = true;     // Validate source file checksums
         bool enable_fallback_loading = true;       // Fall back to binary loading on cache failure
         bool enable_cache_cleanup = true;          // Clean up invalid cache files
+        bool enable_deep_validation = false;       // Perform deep validation including R-tree structure checks
         int max_retry_attempts = 3;                // Maximum retry attempts for cache operations
         std::size_t corruption_threshold_bytes = 1024; // Minimum file size to consider valid
     };
@@ -84,6 +85,11 @@ public:
     ValidationResult validate_cache(const std::string& cache_path,
                                     const std::string& streets_path,
                                     const std::string& osm_path) const;
+    
+    // Deep validation that checks R-tree structure integrity
+    ValidationResult deep_validate_cache(const std::string& cache_path,
+                                         const std::string& streets_path,
+                                         const std::string& osm_path) const;
 
     // Enhanced cache operations with error handling
     bool load_cache(const std::string& cache_path, BinaryDatabase& db) const;

@@ -123,7 +123,9 @@ void MapView::draw(cairo_t *cr, int width, int height)
   
   // Draw intersections and POIs on top
   draw_intersections_with_renderer();
-  draw_pois_with_renderer();
+  if (show_pois_) {
+    draw_pois_with_renderer();
+  }
 
   renderer_->end_frame();
   cairo_restore(cr);
@@ -758,4 +760,12 @@ double MapView::calculate_feature_area(const gisevo::core::Feature& feature) con
   }
   
   return (max_lat - min_lat) * (max_lon - min_lon);
+}
+
+void MapView::set_show_pois(bool show)
+{
+  if (show_pois_ != show) {
+    show_pois_ = show;
+    gtk_widget_queue_draw(drawing_area_);
+  }
 }

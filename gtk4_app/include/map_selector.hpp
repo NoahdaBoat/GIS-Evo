@@ -14,6 +14,7 @@ public:
     std::string display_name;
     std::filesystem::path streets_path;
     std::filesystem::path osm_path;
+    bool use_bin_format = true;
   };
 
   using SelectionCallback = std::function<void(const MapEntry &)>;
@@ -41,6 +42,8 @@ private:
   void start_conversion(const std::filesystem::path &pbf_path);
   void finish_conversion(GSubprocess *process, const std::string &stdout_text, const std::string &stderr_text, bool success);
   void set_conversion_in_progress(bool in_progress);
+  void delete_map_cache(const MapEntry& entry);
+  std::string get_cache_path_for_map(const MapEntry& entry) const;
 
   static void on_row_activated(GtkListBox *box, GtkListBoxRow *row, gpointer user_data);
   static void on_open_clicked(GtkButton *button, gpointer user_data);
@@ -48,6 +51,9 @@ private:
   static void on_convert_clicked(GtkButton *button, gpointer user_data);
   static void on_file_dialog_response(GObject *source, GAsyncResult *result, gpointer user_data);
   static void on_process_complete(GObject *source, GAsyncResult *result, gpointer user_data);
+  static void on_map_conversion_switch_changed(GtkSwitch *switch_widget, gboolean state, gpointer user_data);
+  static void on_cache_menu_clicked(GtkButton *button, gpointer user_data);
+  static void on_delete_cache_clicked(GtkButton *button, gpointer user_data);
 
   GtkWidget *root_;
   GtkListBox *list_box_;

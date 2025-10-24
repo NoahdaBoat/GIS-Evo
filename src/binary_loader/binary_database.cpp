@@ -419,6 +419,33 @@ bool BinaryDatabase::load_with_cache(const std::string& streets_path,
 
     if (validation.valid) {
         if (load_from_cache(cache_path, cache_manager)) {
+            // Validate R-tree structures after loading from cache
+            std::cout << "Validating R-tree structures after cache load..." << std::endl;
+            bool all_valid = true;
+            if (!street_rtree_.validate_structure()) {
+                std::cerr << "Street R-tree validation failed after cache load!" << std::endl;
+                all_valid = false;
+            }
+            if (!intersection_rtree_.validate_structure()) {
+                std::cerr << "Intersection R-tree validation failed after cache load!" << std::endl;
+                all_valid = false;
+            }
+            if (!poi_rtree_.validate_structure()) {
+                std::cerr << "POI R-tree validation failed after cache load!" << std::endl;
+                all_valid = false;
+            }
+            if (!feature_rtree_.validate_structure()) {
+                std::cerr << "Feature R-tree validation failed after cache load!" << std::endl;
+                all_valid = false;
+            }
+            if (all_valid) {
+                std::cout << "All R-tree structures validated successfully after cache load!" << std::endl;
+            } else {
+                std::cerr << "R-tree validation failed after cache load! Deleting cache and rebuilding..." << std::endl;
+                cache_manager.delete_cache(cache_path);
+                // Fall through to rebuild from source files
+                return load_with_cache(streets_path, osm_path, cache_path, cache_manager);
+            }
             return true;
         }
         
@@ -990,6 +1017,34 @@ void BinaryDatabase::build_spatial_indexes() {
               << ", intersections=" << intersection_rtree_.size()
               << ", pois=" << poi_rtree_.size()
               << ", features=" << feature_rtree_.size() << std::endl;
+    
+    std::cout << "R-tree depths: streets=" << street_rtree_.depth() 
+              << ", intersections=" << intersection_rtree_.depth()
+              << ", pois=" << poi_rtree_.depth()
+              << ", features=" << feature_rtree_.depth() << std::endl;
+    
+    // Validate R-tree structures
+    std::cout << "Validating R-tree structures..." << std::endl;
+    bool all_valid = true;
+    if (!street_rtree_.validate_structure()) {
+        std::cerr << "Street R-tree validation failed!" << std::endl;
+        all_valid = false;
+    }
+    if (!intersection_rtree_.validate_structure()) {
+        std::cerr << "Intersection R-tree validation failed!" << std::endl;
+        all_valid = false;
+    }
+    if (!poi_rtree_.validate_structure()) {
+        std::cerr << "POI R-tree validation failed!" << std::endl;
+        all_valid = false;
+    }
+    if (!feature_rtree_.validate_structure()) {
+        std::cerr << "Feature R-tree validation failed!" << std::endl;
+        all_valid = false;
+    }
+    if (all_valid) {
+        std::cout << "All R-tree structures validated successfully!" << std::endl;
+    }
 }
 
 // Feature query implementations

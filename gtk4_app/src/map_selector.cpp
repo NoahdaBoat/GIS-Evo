@@ -269,6 +269,7 @@ MapSelector::MapSelector(SelectionCallback callback)
   auto *refresh_button = gtk_button_new_with_label("Refresh");
   g_signal_connect(refresh_button, "clicked", G_CALLBACK(MapSelector::on_refresh_clicked), this);
   gtk_box_append(GTK_BOX(controls), refresh_button);
+  
   gtk_box_append(GTK_BOX(root_), controls);
 
   gtk_label_set_xalign(GTK_LABEL(status_label_), 0.0f);
@@ -347,13 +348,70 @@ void MapSelector::rebuild_list() {
     gtk_box_append(GTK_BOX(info_box), name_label);
     gtk_box_append(GTK_BOX(info_box), path_label);
 
+    // Create buttons container with better spacing
+    auto *buttons_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_valign(buttons_box, GTK_ALIGN_CENTER);
+    
+    // Create conversion switch with proper styling
+    auto *conversion_switch = gtk_switch_new();
+    gtk_widget_set_tooltip_text(conversion_switch, "Toggle between PBF (original) and BIN (converted) format for this map");
+    gtk_switch_set_active(GTK_SWITCH(conversion_switch), maps_[index].use_bin_format);
+    g_object_set_data(G_OBJECT(conversion_switch), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
+    g_signal_connect(conversion_switch, "state-set", G_CALLBACK(MapSelector::on_map_conversion_switch_changed), this);
+    
+    // Add proper margins and styling to the switch
+    gtk_widget_set_margin_start(conversion_switch, 8);
+    gtk_widget_set_margin_end(conversion_switch, 8);
+    gtk_widget_set_margin_top(conversion_switch, 4);
+    gtk_widget_set_margin_bottom(conversion_switch, 4);
+    gtk_widget_add_css_class(conversion_switch, "switch");
+    
+    // Create a label for the switch
+    auto *switch_label = gtk_label_new("BIN");
+    gtk_widget_add_css_class(switch_label, "dim-label");
+    gtk_label_set_xalign(GTK_LABEL(switch_label), 0.0f);
+    
+    // Create a container for switch and label
+    auto *switch_container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_valign(switch_container, GTK_ALIGN_CENTER);
+    gtk_box_append(GTK_BOX(switch_container), switch_label);
+    gtk_box_append(GTK_BOX(switch_container), conversion_switch);
+    
+    gtk_box_append(GTK_BOX(buttons_box), switch_container);
+    
+    // Create cache management menu button
+    auto *cache_menu_button = gtk_menu_button_new();
+    gtk_widget_set_tooltip_text(cache_menu_button, "Cache management options");
+    g_object_set_data(G_OBJECT(cache_menu_button), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
+    
+    // Create menu for cache options
+    auto *cache_menu = gtk_popover_menu_new_from_model(nullptr);
+    auto *cache_menu_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    
+    // Delete cache button
+    auto *delete_cache_button = gtk_button_new_with_label("Delete Cache");
+    gtk_widget_set_tooltip_text(delete_cache_button, "Delete cached data for this map");
+    g_object_set_data(G_OBJECT(delete_cache_button), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
+    g_signal_connect(delete_cache_button, "clicked", G_CALLBACK(MapSelector::on_delete_cache_clicked), this);
+    gtk_box_append(GTK_BOX(cache_menu_box), delete_cache_button);
+    
+    gtk_popover_set_child(GTK_POPOVER(cache_menu), cache_menu_box);
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(cache_menu_button), GTK_WIDGET(cache_menu));
+    
+    // Set menu button icon (gear/settings icon)
+    auto *cache_icon = gtk_image_new_from_icon_name("preferences-system");
+    gtk_button_set_child(GTK_BUTTON(cache_menu_button), cache_icon);
+    
+    gtk_box_append(GTK_BOX(buttons_box), cache_menu_button);
+    
+    // Create open button
     auto *open_button = gtk_button_new_with_label("Open");
-    gtk_widget_set_valign(open_button, GTK_ALIGN_CENTER);
     g_object_set_data(G_OBJECT(open_button), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
     g_signal_connect(open_button, "clicked", G_CALLBACK(MapSelector::on_open_clicked), this);
+    gtk_box_append(GTK_BOX(buttons_box), open_button);
 
     gtk_box_append(GTK_BOX(outer), info_box);
-    gtk_box_append(GTK_BOX(outer), open_button);
+    gtk_box_append(GTK_BOX(outer), buttons_box);
 
     gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), outer);
     g_object_set_data(G_OBJECT(row), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
@@ -647,5 +705,100 @@ void MapSelector::on_process_complete(GObject *source, GAsyncResult *result, gpo
     if (self->current_process_) {
       g_clear_object(&self->current_process_);
     }
+  }
+}
+
+void MapSelector::on_map_conversion_switch_changed(GtkSwitch *switch_widget, gboolean state, gpointer user_data) {
+  auto *self = static_cast<MapSelector *>(user_data);
+  
+  int index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(switch_widget), "map-index"));
+  if (index < 0 || static_cast<std::size_t>(index) >= self->maps_.size()) {
+    return;
+  }
+  
+  bool use_bin = state;
+  self->maps_[index].use_bin_format = use_bin;
+  
+  // Update status message to reflect current state
+  if (use_bin) {
+    self->set_status("BIN conversion enabled for \"" + self->maps_[index].display_name + "\".", false);
+  } else {
+    self->set_status("PBF mode enabled for \"" + self->maps_[index].display_name + "\".", false);
+  }
+}
+
+void MapSelector::on_cache_menu_clicked(GtkButton *button, gpointer user_data) {
+  auto *self = static_cast<MapSelector *>(user_data);
+  if (!self) {
+    return;
+  }
+  int index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "map-index"));
+  if (index >= 0 && static_cast<std::size_t>(index) < self->maps_.size()) {
+    // Menu is handled by GTK automatically, this is just for future expansion
+  }
+}
+
+void MapSelector::on_delete_cache_clicked(GtkButton *button, gpointer user_data) {
+  auto *self = static_cast<MapSelector *>(user_data);
+  if (!self) {
+    return;
+  }
+  int index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "map-index"));
+  if (index >= 0 && static_cast<std::size_t>(index) < self->maps_.size()) {
+    self->delete_map_cache(self->maps_[index]);
+  }
+}
+
+void MapSelector::delete_map_cache(const MapEntry& entry) {
+  try {
+    std::string cache_path = get_cache_path_for_map(entry);
+    
+    if (cache_path.empty()) {
+      set_status("Could not determine cache path for \"" + entry.display_name + "\".", true);
+      return;
+    }
+    
+    std::error_code ec;
+    if (!std::filesystem::exists(cache_path, ec)) {
+      set_status("No cache file found for \"" + entry.display_name + "\".", false);
+      return;
+    }
+    
+    // Get file size for status message
+    auto file_size = std::filesystem::file_size(cache_path, ec);
+    std::string size_str = "";
+    if (!ec && file_size > 0) {
+      if (file_size >= 1024 * 1024) {
+        size_str = " (" + std::to_string(file_size / (1024 * 1024)) + " MB)";
+      } else if (file_size >= 1024) {
+        size_str = " (" + std::to_string(file_size / 1024) + " KB)";
+      } else {
+        size_str = " (" + std::to_string(file_size) + " bytes)";
+      }
+    }
+    
+    // Delete the cache file
+    bool deleted = std::filesystem::remove(cache_path, ec);
+    if (deleted && !ec) {
+      set_status("Cache deleted for \"" + entry.display_name + "\"" + size_str + ".", false);
+    } else {
+      std::string error_msg = ec.message();
+      set_status("Failed to delete cache for \"" + entry.display_name + "\": " + error_msg, true);
+    }
+    
+  } catch (const std::exception& ex) {
+    set_status("Error deleting cache for \"" + entry.display_name + "\": " + std::string(ex.what()), true);
+  }
+}
+
+std::string MapSelector::get_cache_path_for_map(const MapEntry& entry) const {
+  try {
+    // Generate cache path using the same logic as BinaryDatabase::generate_cache_path
+    std::filesystem::path streets_file_path(entry.streets_path);
+    std::filesystem::path cache_path = streets_file_path.parent_path() / 
+                                      (streets_file_path.stem().string() + ".gisevo.cache");
+    return cache_path.string();
+  } catch (const std::exception& ex) {
+    return "";
   }
 }

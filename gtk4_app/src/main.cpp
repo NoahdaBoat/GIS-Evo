@@ -2,14 +2,118 @@
 
 #include <memory>
 #include <string>
-#include <iostream>
 #include <atomic>
+#include <filesystem>
+#include <vector>
+#include <cstdlib>
+#include <optional>
+#include <array>
 
 #include "core/map_data.hpp"
 #include "map_selector.hpp"
 #include "map_view.hpp"
 
 namespace {
+
+// Helper functions for conversion
+std::optional<std::filesystem::path> find_converter_binary() {
+  if (const char *env_path = std::getenv("GISEVO_OSM_CONVERTER")) {
+    if (*env_path) {
+      std::filesystem::path candidate(env_path);
+      if (std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  std::filesystem::path exe_path;
+  {
+    std::error_code ec;
+    exe_path = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (ec) {
+      exe_path = std::filesystem::current_path();
+    }
+  }
+  const auto exe_dir = exe_path.parent_path();
+
+  const std::array<std::filesystem::path, 5> candidates = {
+    exe_dir / "osm_converter",
+    exe_dir / "../osm_converter",
+    exe_dir / "../tools/osm_converter/osm_converter",
+    exe_dir / "../../tools/osm_converter/osm_converter",
+    exe_dir / "../../../tools/osm_converter/osm_converter"
+  };
+
+  for (const auto &candidate : candidates) {
+    if (std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate)) {
+      return candidate;
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::filesystem::path find_pbf_for_bin(const std::filesystem::path& bin_path) {
+  // Look for corresponding PBF file in the same directory
+  std::filesystem::path bin_dir = bin_path.parent_path();
+  std::string bin_name = bin_path.stem().string();
+  
+  // Remove .streets suffix if present
+  if (bin_name.ends_with(".streets")) {
+    bin_name = bin_name.substr(0, bin_name.length() - 8);
+  }
+  
+  std::filesystem::path pbf_path = bin_dir / (bin_name + ".osm.pbf");
+  if (std::filesystem::exists(pbf_path)) {
+    return pbf_path;
+  }
+  
+  return {};
+}
+
+bool convert_pbf_to_bin(const std::filesystem::path& pbf_path, const std::filesystem::path& output_dir) {
+  auto converter_path = find_converter_binary();
+  if (!converter_path) {
+    return false;
+  }
+
+  std::string map_name = pbf_path.stem().string();
+  if (map_name.ends_with(".osm")) {
+    map_name = map_name.substr(0, map_name.length() - 4);
+  }
+
+  std::vector<std::string> args_storage;
+  args_storage.reserve(9);
+  args_storage.push_back(converter_path->string());
+  args_storage.emplace_back("--input");
+  args_storage.push_back(pbf_path.string());
+  args_storage.emplace_back("--output-dir");
+  args_storage.push_back(output_dir.string());
+  args_storage.emplace_back("--map-name");
+  args_storage.push_back(map_name);
+  args_storage.emplace_back("--quiet");
+
+  std::vector<const char *> argv;
+  argv.reserve(args_storage.size() + 1);
+  for (const auto &arg : args_storage) {
+    argv.push_back(arg.c_str());
+  }
+  argv.push_back(nullptr);
+
+  int result = std::system(nullptr);
+  if (result == 0) {
+    return false; // system not available
+  }
+
+  std::string command;
+  for (size_t i = 0; i < args_storage.size(); ++i) {
+    if (i > 0) command += " ";
+    command += "\"" + args_storage[i] + "\"";
+  }
+
+  int exit_code = std::system(command.c_str());
+  return exit_code == 0;
+}
 
 struct AppState {
   GtkApplication *app = nullptr;
@@ -20,11 +124,17 @@ struct AppState {
   GtkWidget *loading_box = nullptr;
   GtkWidget *loading_label = nullptr;
   GtkWidget *loading_spinner = nullptr;
+  GtkWidget *poi_toggle_button = nullptr;
   MapView *map_view = nullptr;
   std::shared_ptr<gisevo::core::MapData> map_data;
   std::unique_ptr<MapSelector> selector;
   GThread *loading_thread = nullptr;
   std::atomic<bool> loading_cancelled{false};
+  
+  // File paths for current map
+  std::filesystem::path current_streets_path;
+  std::filesystem::path current_osm_path;
+  std::filesystem::path current_pbf_path;
 };
 
 void clear_map(AppState *state) {
@@ -173,9 +283,35 @@ void show_map(AppState *state, const MapSelector::MapEntry &entry) {
 
   clear_map(state);
 
+  // Store file paths
+  state->current_streets_path = entry.streets_path;
+  state->current_osm_path = entry.osm_path;
+  state->current_pbf_path = find_pbf_for_bin(entry.streets_path);
+
+  // Check if conversion mode is enabled for this specific map and convert PBF to BIN if needed
+  MapSelector::MapEntry final_entry = entry;
+  if (entry.use_bin_format) {
+    if (!state->current_pbf_path.empty()) {
+      std::filesystem::path output_dir = state->current_pbf_path.parent_path();
+      if (convert_pbf_to_bin(state->current_pbf_path, output_dir)) {
+        // Update paths to point to BIN files
+        std::string base_name = state->current_pbf_path.stem().string();
+        if (base_name.ends_with(".osm")) {
+          base_name = base_name.substr(0, base_name.length() - 4);
+        }
+        final_entry.streets_path = output_dir / (base_name + ".streets.bin");
+        final_entry.osm_path = output_dir / (base_name + ".osm.bin");
+        
+        // Update stored paths
+        state->current_streets_path = final_entry.streets_path;
+        state->current_osm_path = final_entry.osm_path;
+      }
+    }
+  }
+
   // Show loading UI
-  gtk_label_set_text(GTK_LABEL(state->map_title_label), entry.display_name.c_str());
-  gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + entry.display_name).c_str());
+  gtk_label_set_text(GTK_LABEL(state->map_title_label), final_entry.display_name.c_str());
+  gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + final_entry.display_name).c_str());
   
   // Create loading indicator
   state->loading_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
@@ -197,11 +333,11 @@ void show_map(AppState *state, const MapSelector::MapEntry &entry) {
   gtk_stack_set_visible_child_name(state->stack, "map");
   
   // Start loading in background thread
-  auto *load_data = new LoadMapData{state, entry, nullptr, false};
+  auto *load_data = new LoadMapData{state, final_entry, nullptr, false};
   state->loading_thread = g_thread_new("map-loader", load_map_thread_func, load_data);
   
   if (state->selector) {
-    state->selector->set_status("Loading \"" + entry.display_name + "\"...", false);
+    state->selector->set_status("Loading \"" + final_entry.display_name + "\"...", false);
   }
 }
 
@@ -209,6 +345,15 @@ void on_back_to_maps(GtkButton *, gpointer user_data) {
   auto *state = static_cast<AppState *>(user_data);
   show_selector(state);
 }
+
+void on_poi_toggle_changed(GtkToggleButton *toggle_button, gpointer user_data) {
+  auto *state = static_cast<AppState *>(user_data);
+  if (state->map_view) {
+    bool show_pois = gtk_toggle_button_get_active(toggle_button);
+    state->map_view->set_show_pois(show_pois);
+  }
+}
+
 
 void on_window_destroy(GtkWidget *, gpointer user_data) {
   auto *state = static_cast<AppState *>(user_data);
@@ -254,6 +399,11 @@ void on_activate(GtkApplication *app, gpointer) {
   GtkWidget *back_button = gtk_button_new_with_label("Back to Maps");
   g_signal_connect(back_button, "clicked", G_CALLBACK(on_back_to_maps), state);
   gtk_box_append(GTK_BOX(toolbar), back_button);
+
+  state->poi_toggle_button = gtk_toggle_button_new_with_label("Show POIs");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(state->poi_toggle_button), TRUE);
+  g_signal_connect(state->poi_toggle_button, "toggled", G_CALLBACK(on_poi_toggle_changed), state);
+  gtk_box_append(GTK_BOX(toolbar), state->poi_toggle_button);
 
   state->map_title_label = gtk_label_new("");
   gtk_widget_set_hexpand(state->map_title_label, TRUE);

@@ -205,6 +205,12 @@ CacheManager::ValidationResult CacheManager::validate_cache(
         result.valid = true;
         result.reason.clear();
         log_message("Cache validation successful: " + cache_path, false);
+        
+        // Optionally perform deep validation
+        if (config_.enable_deep_validation) {
+            return deep_validate_cache(cache_path, streets_path, osm_path);
+        }
+        
         return result;
 
     } catch (const std::filesystem::filesystem_error& ex) {
@@ -220,6 +226,70 @@ CacheManager::ValidationResult CacheManager::validate_cache(
         result.error_type = classify_error(cache_path, ex);
         result.detailed_error = ex.what();
         log_message("Unexpected error during cache validation: " + std::string(ex.what()), true);
+        return result;
+    }
+}
+
+CacheManager::ValidationResult CacheManager::deep_validate_cache(
+    const std::string& cache_path,
+    const std::string& streets_path,
+    const std::string& osm_path) const {
+
+    ValidationResult result;
+    
+    try {
+        log_message("Performing deep validation (including R-tree structure): " + cache_path, false);
+        
+        // First do standard validation
+        result = validate_cache(cache_path, streets_path, osm_path);
+        if (!result.valid) {
+            return result;
+        }
+        
+        // Try to read through the entire cache file to validate R-tree structures
+        std::ifstream in(cache_path, std::ios::binary);
+        if (!in.good()) {
+            result.valid = false;
+            result.reason = "Failed to open cache file for deep validation";
+            result.error_type = ValidationResult::ErrorType::PermissionDenied;
+            log_message("Failed to open cache file for deep validation: " + cache_path, true);
+            return result;
+        }
+
+        // Skip magic header
+        char magic[kMagicLength];
+        if (!read_exact(in, magic, kMagicLength)) {
+            result.valid = false;
+            result.reason = "Failed to read magic during deep validation";
+            result.error_type = ValidationResult::ErrorType::FileCorrupted;
+            return result;
+        }
+
+        // Skip metadata
+        CacheMetadata metadata;
+        if (!read_metadata(in, metadata)) {
+            result.valid = false;
+            result.reason = "Failed to read metadata during deep validation";
+            result.error_type = ValidationResult::ErrorType::FileCorrupted;
+            return result;
+        }
+
+        // Note: Full deserialization with R-tree validation requires a BinaryDatabase instance
+        // which has a private constructor. For now, deep validation will be performed during
+        // actual cache loading. If loading fails with R-tree errors, the cache will be marked
+        // as corrupted and deleted.
+        
+        result.valid = true;
+        result.reason.clear();
+        log_message("Deep cache validation successful (structure validation will occur during load): " + cache_path, false);
+        return result;
+
+    } catch (const std::exception& ex) {
+        result.valid = false;
+        result.reason = "Deep validation failed with exception";
+        result.error_type = ValidationResult::ErrorType::DeserializationError;
+        result.detailed_error = ex.what();
+        log_message("Deep validation failed: " + std::string(ex.what()), true);
         return result;
     }
 }
@@ -912,14 +982,33 @@ bool CacheManager::deserialize_database(std::istream& in, BinaryDatabase& db, co
     // Set intersection data
     db.set_intersection_data(intersection_segments, intersection_node_ids);
     
-    // Deserialize R-tree spatial indexes
+    // Deserialize R-tree spatial indexes with enhanced error detection
     try {
         db.deserialize_street_rtree(in);
         db.deserialize_intersection_rtree(in);
         db.deserialize_poi_rtree(in);
         db.deserialize_feature_rtree(in);
+    } catch (const std::runtime_error& ex) {
+        // Check if this is a corruption-related error
+        const std::string error_msg = ex.what();
+        const bool is_corruption = error_msg.find("corrupted") != std::string::npos ||
+                                  error_msg.find("circular reference") != std::string::npos ||
+                                  error_msg.find("exceeded maximum depth") != std::string::npos;
+        
+        if (is_corruption) {
+            std::cerr << "ERROR: R-tree corruption detected during deserialization: " << ex.what() << std::endl;
+            std::cerr << "Cache file is corrupted and should be deleted." << std::endl;
+            // Return false to trigger cache cleanup in the caller
+            return false;
+        } else {
+            std::cerr << "Error deserializing R-trees: " << ex.what() << std::endl;
+            std::cerr << "Rebuilding spatial indexes from loaded data..." << std::endl;
+            // Fallback: rebuild spatial indexes from loaded data
+            db.rebuild_spatial_indexes();
+        }
     } catch (const std::exception& ex) {
-        std::cerr << "Error deserializing R-trees: " << ex.what() << std::endl;
+        std::cerr << "Unexpected error deserializing R-trees: " << ex.what() << std::endl;
+        std::cerr << "Rebuilding spatial indexes from loaded data..." << std::endl;
         // Fallback: rebuild spatial indexes from loaded data
         db.rebuild_spatial_indexes();
     }

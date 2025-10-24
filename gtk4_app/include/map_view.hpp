@@ -17,6 +17,9 @@ public:
   ~MapView() = default;
 
   GtkWidget *widget() const;
+  
+  // POI visibility control
+  void set_show_pois(bool show);
 
 private:
   // Viewport bounds for spatial queries
@@ -55,6 +58,9 @@ private:
   ViewportCache viewport_cache_;
   gisevo::core::Bounds coordinate_system_bounds_{};
   bool coordinate_system_initialized_ = false;
+  
+  // POI visibility control
+  bool show_pois_ = true;
   
   // Coordinate conversion functions
   gisevo::core::Point2D latlon_to_screen(gisevo::core::LatLon latlon) const;
