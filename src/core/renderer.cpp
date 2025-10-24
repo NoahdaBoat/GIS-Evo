@@ -205,6 +205,9 @@ void Renderer::draw_feature(const gisevo::core::Feature& feature, const RenderSt
     if (!impl_->cr || !impl_->coords || feature.points.size() < 3) return;
     
     cairo_set_source_rgba(impl_->cr, style.color.r, style.color.g, style.color.b, style.color.a);
+    if (style.stroked) {
+        cairo_set_line_width(impl_->cr, style.line_width / impl_->zoom);
+    }
     
     bool first_point = true;
     for (const auto& point : feature.points) {
@@ -221,7 +224,7 @@ void Renderer::draw_feature(const gisevo::core::Feature& feature, const RenderSt
     cairo_close_path(impl_->cr);
     
     if (style.filled) {
-        cairo_fill(impl_->cr);
+        cairo_fill_preserve(impl_->cr);
     }
     if (style.stroked) {
         cairo_stroke(impl_->cr);
