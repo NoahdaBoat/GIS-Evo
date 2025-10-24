@@ -450,16 +450,16 @@ void MapView::draw_features_by_type_simple(cairo_t *cr)
       case FeatureType::PARK:
       case FeatureType::GREENSPACE:
       case FeatureType::GOLFCOURSE:
-        cairo_set_source_rgba(cr, 0.0, 0.8, 0.0, 0.3);  // Green for parks
+        cairo_set_source_rgba(cr, 0.55, 0.8, 0.4, 0.6);  // Proper green for parks
         break;
       case FeatureType::LAKE:
       case FeatureType::RIVER:
       case FeatureType::STREAM:
       case FeatureType::GLACIER:
-        cairo_set_source_rgba(cr, 0.0, 0.0, 0.8, 0.5);  // Blue for water
+        cairo_set_source_rgba(cr, 0.4, 0.7, 0.9, 0.7);  // Proper blue for water
         break;
       case FeatureType::BUILDING:
-        cairo_set_source_rgba(cr, 0.8, 0.0, 0.0, 0.4);  // Red for buildings
+        cairo_set_source_rgba(cr, 0.7, 0.65, 0.6, 0.5);  // Beige/tan for buildings
         break;
       default:
         cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.3);  // Gray for other
@@ -507,16 +507,16 @@ void MapView::draw_streets_by_classification_simple(cairo_t *cr)
   // Level-of-Detail rendering based on zoom level
   if (zoom_ < 0.5) {
     // Very low zoom: Only show highways
-    draw_street_group(cr, highways, 3.0, 0.0, 0.0, 0.0);  // Black, thick
+    draw_street_group(cr, highways, 3.0, 0.95, 0.65, 0.2);  // Orange for highways
   } else if (zoom_ < 1.5) {
     // Low zoom: Show highways and major roads
-    draw_street_group(cr, major_roads, 2.0, 0.2, 0.2, 0.2);  // Dark gray
-    draw_street_group(cr, highways, 3.0, 0.0, 0.0, 0.0);     // Black, thick
+    draw_street_group(cr, major_roads, 2.0, 0.4, 0.4, 0.4);  // Medium gray
+    draw_street_group(cr, highways, 3.0, 0.95, 0.65, 0.2);     // Orange for highways
   } else {
     // High zoom: Show all streets
-    draw_street_group(cr, minor_roads, 1.5, 0.4, 0.4, 0.4);  // Light gray
-    draw_street_group(cr, major_roads, 2.0, 0.2, 0.2, 0.2);  // Dark gray
-    draw_street_group(cr, highways, 3.0, 0.0, 0.0, 0.0);     // Black, thick
+    draw_street_group(cr, minor_roads, 1.5, 0.7, 0.7, 0.7);  // Light gray
+    draw_street_group(cr, major_roads, 2.0, 0.4, 0.4, 0.4);  // Medium gray
+    draw_street_group(cr, highways, 3.0, 0.95, 0.65, 0.2);     // Orange for highways
   }
 }
 
@@ -579,8 +579,7 @@ void MapView::draw_pois_simple(cairo_t *cr)
     const auto& poi = map_data_->poi(poi_idx);
     gisevo::core::Point2D screen_pos = latlon_to_screen(poi.position);
     
-    cairo_rectangle(cr, screen_pos.x - 2.0 / zoom_, screen_pos.y - 2.0 / zoom_, 
-                    4.0 / zoom_, 4.0 / zoom_);
+    cairo_arc(cr, screen_pos.x, screen_pos.y, 2.0 / zoom_, 0, 2 * M_PI);
     cairo_fill(cr);
   }
   
@@ -698,7 +697,7 @@ void MapView::draw_streets_with_renderer()
     // Low zoom: Show highways and major roads
     gisevo::rendering::RenderStyle major_style;
     major_style.line_width = 2.5;
-    major_style.color = {0.15, 0.15, 0.15, 1.0};
+    major_style.color = {0.4, 0.4, 0.4, 1.0};  // Medium gray for major roads
     major_style.stroked = true;
     
     renderer_->draw_streets(major_roads, *map_data_, major_style);
@@ -707,12 +706,12 @@ void MapView::draw_streets_with_renderer()
     // High zoom: Show all streets
     gisevo::rendering::RenderStyle minor_style;
     minor_style.line_width = 1.8;
-    minor_style.color = {0.3, 0.3, 0.3, 1.0};
+    minor_style.color = {0.7, 0.7, 0.7, 1.0};  // Light gray for minor roads
     minor_style.stroked = true;
     
     gisevo::rendering::RenderStyle major_style;
     major_style.line_width = 2.5;
-    major_style.color = {0.15, 0.15, 0.15, 1.0};
+    major_style.color = {0.4, 0.4, 0.4, 1.0};  // Medium gray for major roads
     major_style.stroked = true;
     
     renderer_->draw_streets(minor_roads, *map_data_, minor_style);

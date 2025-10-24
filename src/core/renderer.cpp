@@ -57,14 +57,14 @@ double CoordinateSystem::calculate_scale(int viewport_width, int viewport_height
 namespace styles {
     const RenderStyle street_default{
         .line_width = 2.5,
-        .color = {0.1, 0.1, 0.1, 1.0},
+        .color = {0.6, 0.6, 0.6, 1.0},  // Light gray for default roads
         .filled = false,
         .stroked = true
     };
     
     const RenderStyle street_highway{
         .line_width = 4.0,
-        .color = {0.0, 0.0, 0.0, 1.0},
+        .color = {0.95, 0.65, 0.2, 1.0},  // Orange/yellow for highways
         .filled = false,
         .stroked = true
     };
@@ -84,19 +84,19 @@ namespace styles {
     };
     
     const RenderStyle feature_park{
-        .color = {0.0, 0.8, 0.0, 0.2},
+        .color = {0.55, 0.8, 0.4, 0.6},  // Proper green for parks with better opacity
         .filled = true,
         .stroked = true
     };
     
     const RenderStyle feature_water{
-        .color = {0.0, 0.0, 0.8, 0.3},
+        .color = {0.4, 0.7, 0.9, 0.7},  // Proper blue for water with better opacity
         .filled = true,
         .stroked = true
     };
     
     const RenderStyle feature_building{
-        .color = {0.8, 0.0, 0.0, 0.2},
+        .color = {0.7, 0.65, 0.6, 0.5},  // Beige/tan for buildings with better opacity
         .filled = true,
         .stroked = true
     };
@@ -191,11 +191,7 @@ void Renderer::draw_poi(const gisevo::core::POI& poi, const RenderStyle& style) 
     auto transformed = transform_point(poi.position);
     
     cairo_set_source_rgba(impl_->cr, style.color.r, style.color.g, style.color.b, style.color.a);
-    cairo_rectangle(impl_->cr, 
-                   transformed.x - style.point_size / impl_->zoom / 2,
-                   transformed.y - style.point_size / impl_->zoom / 2,
-                   style.point_size / impl_->zoom,
-                   style.point_size / impl_->zoom);
+    cairo_arc(impl_->cr, transformed.x, transformed.y, style.point_size / impl_->zoom, 0, 2 * M_PI);
     
     if (style.filled) {
         cairo_fill(impl_->cr);
@@ -209,6 +205,9 @@ void Renderer::draw_feature(const gisevo::core::Feature& feature, const RenderSt
     if (!impl_->cr || !impl_->coords || feature.points.size() < 3) return;
     
     cairo_set_source_rgba(impl_->cr, style.color.r, style.color.g, style.color.b, style.color.a);
+    if (style.stroked) {
+        cairo_set_line_width(impl_->cr, style.line_width / impl_->zoom);
+    }
     
     bool first_point = true;
     for (const auto& point : feature.points) {
@@ -225,7 +224,7 @@ void Renderer::draw_feature(const gisevo::core::Feature& feature, const RenderSt
     cairo_close_path(impl_->cr);
     
     if (style.filled) {
-        cairo_fill(impl_->cr);
+        cairo_fill_preserve(impl_->cr);
     }
     if (style.stroked) {
         cairo_stroke(impl_->cr);
