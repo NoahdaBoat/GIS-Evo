@@ -6,12 +6,9 @@
 #include <string>
 #include <memory>
 #include <cstdint>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include "../spatial_hash/rtree.hpp"
 #include "cache_manager.hpp"
+#include "mmap_helpers.hpp"
 
 namespace gisevo {
 
@@ -211,23 +208,8 @@ private:
     std::vector<OSMID> intersection_node_ids_; // OSM node IDs for intersections
     
     // Memory-mapped file support
-    struct MappedFile {
-        void* data = nullptr;
-        size_t size = 0;
-        int fd = -1;
-        
-        ~MappedFile() {
-            if (data && data != MAP_FAILED) {
-                munmap(data, size);
-            }
-            if (fd != -1) {
-                close(fd);
-            }
-        }
-    };
-    
-    std::unique_ptr<MappedFile> streets_mmap_;
-    std::unique_ptr<MappedFile> osm_mmap_;
+    std::unique_ptr<mmap_helpers::MappedFile> streets_mmap_;
+    std::unique_ptr<mmap_helpers::MappedFile> osm_mmap_;
     
     // Spatial indexes for fast queries
     RTree<std::size_t> street_rtree_;
@@ -244,7 +226,6 @@ private:
     
     void build_indexes();
     void build_spatial_indexes();
-    bool map_file(const std::string& path, std::unique_ptr<MappedFile>& mmap);
 };
 
 } // namespace gisevo
