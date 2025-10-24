@@ -352,57 +352,54 @@ void MapSelector::rebuild_list() {
     auto *buttons_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_set_valign(buttons_box, GTK_ALIGN_CENTER);
     
-    // Create conversion switch with proper styling
+    // Create map settings menu button
+    auto *settings_menu_button = gtk_menu_button_new();
+    gtk_widget_set_tooltip_text(settings_menu_button, "Map settings and options");
+    g_object_set_data(G_OBJECT(settings_menu_button), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
+    
+    // Create menu for map settings
+    auto *settings_menu = gtk_popover_menu_new_from_model(nullptr);
+    auto *settings_menu_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_margin_top(settings_menu_box, 6);
+    gtk_widget_set_margin_bottom(settings_menu_box, 6);
+    gtk_widget_set_margin_start(settings_menu_box, 6);
+    gtk_widget_set_margin_end(settings_menu_box, 6);
+    
+    // BIN format toggle section
+    auto *bin_section = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    auto *bin_label = gtk_label_new("Use BIN Format");
+    gtk_widget_set_hexpand(bin_label, TRUE);
+    gtk_label_set_xalign(GTK_LABEL(bin_label), 0.0f);
+    
     auto *conversion_switch = gtk_switch_new();
     gtk_widget_set_tooltip_text(conversion_switch, "Toggle between PBF (original) and BIN (converted) format for this map");
     gtk_switch_set_active(GTK_SWITCH(conversion_switch), maps_[index].use_bin_format);
     g_object_set_data(G_OBJECT(conversion_switch), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
     g_signal_connect(conversion_switch, "state-set", G_CALLBACK(MapSelector::on_map_conversion_switch_changed), this);
     
-    // Add proper margins and styling to the switch
-    gtk_widget_set_margin_start(conversion_switch, 8);
-    gtk_widget_set_margin_end(conversion_switch, 8);
-    gtk_widget_set_margin_top(conversion_switch, 4);
-    gtk_widget_set_margin_bottom(conversion_switch, 4);
-    gtk_widget_add_css_class(conversion_switch, "switch");
+    gtk_box_append(GTK_BOX(bin_section), bin_label);
+    gtk_box_append(GTK_BOX(bin_section), conversion_switch);
+    gtk_box_append(GTK_BOX(settings_menu_box), bin_section);
     
-    // Create a label for the switch
-    auto *switch_label = gtk_label_new("BIN");
-    gtk_widget_add_css_class(switch_label, "dim-label");
-    gtk_label_set_xalign(GTK_LABEL(switch_label), 0.0f);
-    
-    // Create a container for switch and label
-    auto *switch_container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_widget_set_valign(switch_container, GTK_ALIGN_CENTER);
-    gtk_box_append(GTK_BOX(switch_container), switch_label);
-    gtk_box_append(GTK_BOX(switch_container), conversion_switch);
-    
-    gtk_box_append(GTK_BOX(buttons_box), switch_container);
-    
-    // Create cache management menu button
-    auto *cache_menu_button = gtk_menu_button_new();
-    gtk_widget_set_tooltip_text(cache_menu_button, "Cache management options");
-    g_object_set_data(G_OBJECT(cache_menu_button), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
-    
-    // Create menu for cache options
-    auto *cache_menu = gtk_popover_menu_new_from_model(nullptr);
-    auto *cache_menu_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    // Separator
+    auto *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_box_append(GTK_BOX(settings_menu_box), separator);
     
     // Delete cache button
     auto *delete_cache_button = gtk_button_new_with_label("Delete Cache");
     gtk_widget_set_tooltip_text(delete_cache_button, "Delete cached data for this map");
     g_object_set_data(G_OBJECT(delete_cache_button), "map-index", GINT_TO_POINTER(static_cast<int>(index)));
     g_signal_connect(delete_cache_button, "clicked", G_CALLBACK(MapSelector::on_delete_cache_clicked), this);
-    gtk_box_append(GTK_BOX(cache_menu_box), delete_cache_button);
+    gtk_box_append(GTK_BOX(settings_menu_box), delete_cache_button);
     
-    gtk_popover_set_child(GTK_POPOVER(cache_menu), cache_menu_box);
-    gtk_menu_button_set_popover(GTK_MENU_BUTTON(cache_menu_button), GTK_WIDGET(cache_menu));
+    gtk_popover_set_child(GTK_POPOVER(settings_menu), settings_menu_box);
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(settings_menu_button), GTK_WIDGET(settings_menu));
     
     // Set menu button icon (gear/settings icon)
-    auto *cache_icon = gtk_image_new_from_icon_name("preferences-system");
-    gtk_button_set_child(GTK_BUTTON(cache_menu_button), cache_icon);
+    auto *settings_icon = gtk_image_new_from_icon_name("preferences-system");
+    gtk_menu_button_set_child(GTK_MENU_BUTTON(settings_menu_button), settings_icon);
     
-    gtk_box_append(GTK_BOX(buttons_box), cache_menu_button);
+    gtk_box_append(GTK_BOX(buttons_box), settings_menu_button);
     
     // Create open button
     auto *open_button = gtk_button_new_with_label("Open");
