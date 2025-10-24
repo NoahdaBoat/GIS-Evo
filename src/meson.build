@@ -18,6 +18,9 @@ core_sources = files(
   # Binary loader (NEW)
   'binary_loader/binary_database.cpp',
   'binary_loader/cache_manager.cpp',
+  'binary_loader/cache_io_helpers.cpp',
+  'binary_loader/cache_serializer.cpp',
+  'binary_loader/mmap_helpers.cpp',
   'external_api_impl.cpp',
   
   # Coordinate conversions - dependencies fixed in Task 0.1

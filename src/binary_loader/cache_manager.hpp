@@ -161,16 +161,6 @@ private:
     // Serialization/deserialization methods
     bool serialize_database(std::ostream& out, const BinaryDatabase& db) const;
     bool deserialize_database(std::istream& in, BinaryDatabase& db, const CacheMetadata& metadata) const;
-    
-    // Helper methods for serializing data structures
-    bool write_vector_size(std::ostream& out, std::size_t size) const;
-    bool read_vector_size(std::istream& in, std::size_t& size) const;
-    bool write_string_vector(std::ostream& out, const std::vector<std::string>& vec) const;
-    bool read_string_vector(std::istream& in, std::vector<std::string>& vec) const;
-    bool write_tag_vector(std::ostream& out, const std::vector<std::pair<std::string, std::string>>& tags) const;
-    bool read_tag_vector(std::istream& in, std::vector<std::pair<std::string, std::string>>& tags) const;
-    bool write_osmid_vector(std::ostream& out, const std::vector<OSMID>& vec) const;
-    bool read_osmid_vector(std::istream& in, std::vector<OSMID>& vec) const;
 
     static constexpr const char* kCacheMagic = "GISEVOC1";
     static constexpr std::uint32_t kCacheVersion = 1;
