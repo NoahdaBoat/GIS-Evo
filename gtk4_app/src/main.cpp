@@ -17,6 +17,7 @@ struct AppState {
   GtkStack *stack = nullptr;
   GtkWidget *map_container = nullptr;
   GtkWidget *map_title_label = nullptr;
+  GtkWidget *loading_box = nullptr;
   GtkWidget *loading_label = nullptr;
   GtkWidget *loading_spinner = nullptr;
   MapView *map_view = nullptr;
@@ -37,6 +38,14 @@ void clear_map(AppState *state) {
     g_thread_join(state->loading_thread);
     state->loading_thread = nullptr;
     state->loading_cancelled.store(false);
+  }
+  
+  // Remove loading box if present
+  if (state->loading_box && state->map_container) {
+    gtk_box_remove(GTK_BOX(state->map_container), state->loading_box);
+    state->loading_box = nullptr;
+    state->loading_label = nullptr;  // children are destroyed with parent
+    state->loading_spinner = nullptr;
   }
   
   if (state->map_view) {
@@ -102,13 +111,11 @@ static gboolean map_loading_complete(gpointer user_data) {
   gtk_label_set_text(GTK_LABEL(state->map_title_label), load_data->entry.display_name.c_str());
   gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + load_data->entry.display_name).c_str());
   
-  // Remove loading widget and append map widget
-  if (state->loading_label) {
-    gtk_box_remove(GTK_BOX(state->map_container), state->loading_label);
-    state->loading_label = nullptr;
-  }
-  if (state->loading_spinner) {
-    gtk_box_remove(GTK_BOX(state->map_container), state->loading_spinner);
+  // Remove loading widget box and append map widget
+  if (state->loading_box) {
+    gtk_box_remove(GTK_BOX(state->map_container), state->loading_box);
+    state->loading_box = nullptr;
+    state->loading_label = nullptr;  // children are destroyed with parent
     state->loading_spinner = nullptr;
   }
   
@@ -171,22 +178,22 @@ void show_map(AppState *state, const MapSelector::MapEntry &entry) {
   gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + entry.display_name).c_str());
   
   // Create loading indicator
-  GtkWidget *loading_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-  gtk_widget_set_halign(loading_box, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign(loading_box, GTK_ALIGN_CENTER);
-  gtk_widget_set_hexpand(loading_box, TRUE);
-  gtk_widget_set_vexpand(loading_box, TRUE);
+  state->loading_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_halign(state->loading_box, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(state->loading_box, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand(state->loading_box, TRUE);
+  gtk_widget_set_vexpand(state->loading_box, TRUE);
   
   state->loading_spinner = gtk_spinner_new();
   gtk_spinner_start(GTK_SPINNER(state->loading_spinner));
   gtk_widget_set_size_request(state->loading_spinner, 48, 48);
-  gtk_box_append(GTK_BOX(loading_box), state->loading_spinner);
+  gtk_box_append(GTK_BOX(state->loading_box), state->loading_spinner);
   
   state->loading_label = gtk_label_new("Loading map data...");
   gtk_widget_add_css_class(state->loading_label, "title-3");
-  gtk_box_append(GTK_BOX(loading_box), state->loading_label);
+  gtk_box_append(GTK_BOX(state->loading_box), state->loading_label);
   
-  gtk_box_append(GTK_BOX(state->map_container), loading_box);
+  gtk_box_append(GTK_BOX(state->map_container), state->loading_box);
   gtk_stack_set_visible_child_name(state->stack, "map");
   
   // Start loading in background thread
