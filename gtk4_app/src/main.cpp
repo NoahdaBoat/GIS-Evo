@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <atomic>
 
 #include "core/map_data.hpp"
 #include "map_selector.hpp"
@@ -16,15 +17,28 @@ struct AppState {
   GtkStack *stack = nullptr;
   GtkWidget *map_container = nullptr;
   GtkWidget *map_title_label = nullptr;
+  GtkWidget *loading_label = nullptr;
+  GtkWidget *loading_spinner = nullptr;
   MapView *map_view = nullptr;
   std::shared_ptr<gisevo::core::MapData> map_data;
   std::unique_ptr<MapSelector> selector;
+  GThread *loading_thread = nullptr;
+  std::atomic<bool> loading_cancelled{false};
 };
 
 void clear_map(AppState *state) {
   if (!state) {
     return;
   }
+  
+  // Cancel any ongoing loading
+  if (state->loading_thread) {
+    state->loading_cancelled.store(true);
+    g_thread_join(state->loading_thread);
+    state->loading_thread = nullptr;
+    state->loading_cancelled.store(false);
+  }
+  
   if (state->map_view) {
     GtkWidget *map_widget = state->map_view->widget();
     if (state->map_container && map_widget && GTK_IS_WIDGET(map_widget)) {
@@ -49,23 +63,35 @@ void show_selector(AppState *state) {
   gtk_stack_set_visible_child_name(state->stack, "selector");
 }
 
-void show_map(AppState *state, const MapSelector::MapEntry &entry) {
-  if (!state) {
-    return;
-  }
+struct LoadMapData {
+  AppState *state;
+  MapSelector::MapEntry entry;
+  std::shared_ptr<gisevo::core::MapData> map_data;
+  bool success;
+};
 
-  auto map_data = std::make_shared<gisevo::core::MapData>();
-  if (!map_data->load_from_binary(entry.streets_path.string(), entry.osm_path.string())) {
-    if (state->selector) {
-      state->selector->set_status("Failed to load \"" + entry.display_name + "\".", true);
+static gboolean map_loading_complete(gpointer user_data) {
+  auto *load_data = static_cast<LoadMapData *>(user_data);
+  auto *state = load_data->state;
+  
+  // Hide loading indicator
+  if (state->loading_spinner) {
+    gtk_spinner_stop(GTK_SPINNER(state->loading_spinner));
+  }
+  
+  if (!load_data->success || state->loading_cancelled.load()) {
+    // Loading failed or was cancelled
+    if (state->selector && !state->loading_cancelled.load()) {
+      state->selector->set_status("Failed to load \"" + load_data->entry.display_name + "\".", true);
     }
-    return;
+    show_selector(state);
+    delete load_data;
+    return G_SOURCE_REMOVE;
   }
-
-  clear_map(state);
-
-  state->map_data = map_data;
-  state->map_view = new MapView(map_data);
+  
+  // Loading succeeded
+  state->map_data = load_data->map_data;
+  state->map_view = new MapView(state->map_data);
   GtkWidget *map_widget = state->map_view->widget();
   
   // Set properties BEFORE appending to prevent premature draw
@@ -73,15 +99,102 @@ void show_map(AppState *state, const MapSelector::MapEntry &entry) {
   gtk_widget_set_vexpand(map_widget, TRUE);
   
   // Update UI state first
-  gtk_label_set_text(GTK_LABEL(state->map_title_label), entry.display_name.c_str());
-  gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + entry.display_name).c_str());
+  gtk_label_set_text(GTK_LABEL(state->map_title_label), load_data->entry.display_name.c_str());
+  gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + load_data->entry.display_name).c_str());
   
-  // Append widget LAST to trigger draw only when ready
+  // Remove loading widget and append map widget
+  if (state->loading_label) {
+    gtk_box_remove(GTK_BOX(state->map_container), state->loading_label);
+    state->loading_label = nullptr;
+  }
+  if (state->loading_spinner) {
+    gtk_box_remove(GTK_BOX(state->map_container), state->loading_spinner);
+    state->loading_spinner = nullptr;
+  }
+  
   gtk_box_append(GTK_BOX(state->map_container), map_widget);
   gtk_stack_set_visible_child_name(state->stack, "map");
 
   if (state->selector) {
     state->selector->set_status("", false);
+  }
+  
+  state->loading_thread = nullptr;
+  delete load_data;
+  return G_SOURCE_REMOVE;
+}
+
+static gpointer load_map_thread_func(gpointer user_data) {
+  auto *load_data = static_cast<LoadMapData *>(user_data);
+  
+  auto map_data = std::make_shared<gisevo::core::MapData>();
+  
+  // Check for cancellation before starting heavy work
+  if (load_data->state->loading_cancelled.load()) {
+    load_data->success = false;
+    g_idle_add(map_loading_complete, load_data);
+    return nullptr;
+  }
+  
+  // Perform the actual loading (this is the slow part)
+  bool success = map_data->load_from_binary(
+    load_data->entry.streets_path.string(), 
+    load_data->entry.osm_path.string()
+  );
+  
+  load_data->map_data = map_data;
+  load_data->success = success;
+  
+  // Schedule UI update on main thread
+  g_idle_add(map_loading_complete, load_data);
+  
+  return nullptr;
+}
+
+void show_map(AppState *state, const MapSelector::MapEntry &entry) {
+  if (!state) {
+    return;
+  }
+  
+  // Cancel any existing load
+  if (state->loading_thread) {
+    state->loading_cancelled.store(true);
+    g_thread_join(state->loading_thread);
+    state->loading_thread = nullptr;
+    state->loading_cancelled.store(false);
+  }
+
+  clear_map(state);
+
+  // Show loading UI
+  gtk_label_set_text(GTK_LABEL(state->map_title_label), entry.display_name.c_str());
+  gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + entry.display_name).c_str());
+  
+  // Create loading indicator
+  GtkWidget *loading_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_halign(loading_box, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(loading_box, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand(loading_box, TRUE);
+  gtk_widget_set_vexpand(loading_box, TRUE);
+  
+  state->loading_spinner = gtk_spinner_new();
+  gtk_spinner_start(GTK_SPINNER(state->loading_spinner));
+  gtk_widget_set_size_request(state->loading_spinner, 48, 48);
+  gtk_box_append(GTK_BOX(loading_box), state->loading_spinner);
+  
+  state->loading_label = gtk_label_new("Loading map data...");
+  gtk_widget_add_css_class(state->loading_label, "title-3");
+  gtk_box_append(GTK_BOX(loading_box), state->loading_label);
+  
+  gtk_box_append(GTK_BOX(state->map_container), loading_box);
+  gtk_stack_set_visible_child_name(state->stack, "map");
+  
+  // Start loading in background thread
+  auto *load_data = new LoadMapData{state, entry, nullptr, false};
+  state->loading_thread = g_thread_new("map-loader", load_map_thread_func, load_data);
+  
+  if (state->selector) {
+    state->selector->set_status("Loading \"" + entry.display_name + "\"...", false);
   }
 }
 
@@ -92,6 +205,14 @@ void on_back_to_maps(GtkButton *, gpointer user_data) {
 
 void on_window_destroy(GtkWidget *, gpointer user_data) {
   auto *state = static_cast<AppState *>(user_data);
+  
+  // Cancel and wait for any loading thread
+  if (state->loading_thread) {
+    state->loading_cancelled.store(true);
+    g_thread_join(state->loading_thread);
+    state->loading_thread = nullptr;
+  }
+  
   clear_map(state);
   delete state;
 }
