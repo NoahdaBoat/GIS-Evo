@@ -151,8 +151,11 @@ void clear_map(AppState *state) {
   }
   
   // Remove loading box if present
-  if (state->loading_box && state->map_container) {
-    gtk_box_remove(GTK_BOX(state->map_container), state->loading_box);
+  if (state->loading_box && state->map_container && GTK_IS_WIDGET(state->loading_box)) {
+    GtkWidget *parent = gtk_widget_get_parent(state->loading_box);
+    if (parent && GTK_IS_WIDGET(parent) && parent == GTK_WIDGET(state->map_container)) {
+      gtk_box_remove(GTK_BOX(state->map_container), state->loading_box);
+    }
     state->loading_box = nullptr;
     state->loading_label = nullptr;  // children are destroyed with parent
     state->loading_spinner = nullptr;
@@ -161,8 +164,9 @@ void clear_map(AppState *state) {
   if (state->map_view) {
     GtkWidget *map_widget = state->map_view->widget();
     if (state->map_container && map_widget && GTK_IS_WIDGET(map_widget)) {
+      // Check if the map widget is actually a child of the map container
       GtkWidget *parent = gtk_widget_get_parent(map_widget);
-      if (parent && GTK_IS_WIDGET(parent)) {
+      if (parent && GTK_IS_WIDGET(parent) && parent == GTK_WIDGET(state->map_container)) {
         gtk_box_remove(GTK_BOX(state->map_container), map_widget);
       }
     }
@@ -179,7 +183,9 @@ void show_selector(AppState *state) {
   clear_map(state);
   gtk_label_set_text(GTK_LABEL(state->map_title_label), "");
   gtk_window_set_title(GTK_WINDOW(state->window), "GIS Evo");
-  gtk_stack_set_visible_child_name(state->stack, "selector");
+  if (state->stack && GTK_IS_STACK(state->stack)) {
+    gtk_stack_set_visible_child_name(state->stack, "selector");
+  }
 }
 
 struct LoadMapData {
@@ -222,15 +228,20 @@ static gboolean map_loading_complete(gpointer user_data) {
   gtk_window_set_title(GTK_WINDOW(state->window), ("GIS Evo - " + load_data->entry.display_name).c_str());
   
   // Remove loading widget box and append map widget
-  if (state->loading_box) {
-    gtk_box_remove(GTK_BOX(state->map_container), state->loading_box);
+  if (state->loading_box && GTK_IS_WIDGET(state->loading_box)) {
+    GtkWidget *parent = gtk_widget_get_parent(state->loading_box);
+    if (parent && GTK_IS_WIDGET(parent) && parent == GTK_WIDGET(state->map_container)) {
+      gtk_box_remove(GTK_BOX(state->map_container), state->loading_box);
+    }
     state->loading_box = nullptr;
     state->loading_label = nullptr;  // children are destroyed with parent
     state->loading_spinner = nullptr;
   }
   
   gtk_box_append(GTK_BOX(state->map_container), map_widget);
-  gtk_stack_set_visible_child_name(state->stack, "map");
+  if (state->stack && GTK_IS_STACK(state->stack)) {
+    gtk_stack_set_visible_child_name(state->stack, "map");
+  }
 
   if (state->selector) {
     state->selector->set_status("", false);
@@ -330,7 +341,9 @@ void show_map(AppState *state, const MapSelector::MapEntry &entry) {
   gtk_box_append(GTK_BOX(state->loading_box), state->loading_label);
   
   gtk_box_append(GTK_BOX(state->map_container), state->loading_box);
-  gtk_stack_set_visible_child_name(state->stack, "map");
+  if (state->stack && GTK_IS_STACK(state->stack)) {
+    gtk_stack_set_visible_child_name(state->stack, "map");
+  }
   
   // Start loading in background thread
   auto *load_data = new LoadMapData{state, final_entry, nullptr, false};
@@ -420,7 +433,9 @@ void on_activate(GtkApplication *app, gpointer) {
   gtk_stack_add_named(state->stack, map_page, "map");
 
   gtk_window_set_child(GTK_WINDOW(state->window), GTK_WIDGET(state->stack));
-  gtk_stack_set_visible_child_name(state->stack, "selector");
+  if (state->stack && GTK_IS_STACK(state->stack)) {
+    gtk_stack_set_visible_child_name(state->stack, "selector");
+  }
 
   g_signal_connect(state->window, "destroy", G_CALLBACK(on_window_destroy), state);
 
