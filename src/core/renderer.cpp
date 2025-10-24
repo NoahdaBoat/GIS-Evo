@@ -57,14 +57,14 @@ double CoordinateSystem::calculate_scale(int viewport_width, int viewport_height
 namespace styles {
     const RenderStyle street_default{
         .line_width = 2.5,
-        .color = {0.1, 0.1, 0.1, 1.0},
+        .color = {0.6, 0.6, 0.6, 1.0},  // Light gray for default roads
         .filled = false,
         .stroked = true
     };
     
     const RenderStyle street_highway{
         .line_width = 4.0,
-        .color = {0.0, 0.0, 0.0, 1.0},
+        .color = {0.95, 0.65, 0.2, 1.0},  // Orange/yellow for highways
         .filled = false,
         .stroked = true
     };
@@ -84,19 +84,19 @@ namespace styles {
     };
     
     const RenderStyle feature_park{
-        .color = {0.0, 0.8, 0.0, 0.2},
+        .color = {0.55, 0.8, 0.4, 0.6},  // Proper green for parks with better opacity
         .filled = true,
         .stroked = true
     };
     
     const RenderStyle feature_water{
-        .color = {0.0, 0.0, 0.8, 0.3},
+        .color = {0.4, 0.7, 0.9, 0.7},  // Proper blue for water with better opacity
         .filled = true,
         .stroked = true
     };
     
     const RenderStyle feature_building{
-        .color = {0.8, 0.0, 0.0, 0.2},
+        .color = {0.7, 0.65, 0.6, 0.5},  // Beige/tan for buildings with better opacity
         .filled = true,
         .stroked = true
     };
