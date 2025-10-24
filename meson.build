@@ -5,3 +5,4 @@ project('gis-evo', 'cpp',
 subdir('src')
 subdir('gtk4_app')
 subdir('tools/osm_converter')
+subdir('tools/xml_to_pbf_converter')

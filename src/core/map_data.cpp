@@ -3,7 +3,6 @@
 #include "binary_loader/binary_database.hpp"
 
 #include <iostream>
-#include <stdexcept>
 
 namespace {
 
@@ -21,7 +20,12 @@ bool MapData::load_from_binary(const std::string& streets_path, const std::strin
     unload();
 
     auto& database = db();
-    database.clear();
+    
+    // Check if database is already loaded with the same files to prevent double loading
+    if (database.get_segment_count() > 0) {
+        std::cerr << "Database already loaded, clearing first..." << std::endl;
+        database.clear();
+    }
 
     const auto cache_path = streets_path + ".gisevo.cache";
     CacheManager cache_manager;
@@ -57,6 +61,24 @@ bool MapData::load_from_binary(const std::string& streets_path, const std::strin
         for (unsigned j = 0; j < info.numCurvePoints; ++j) {
             segment.curve_points.push_back(database.get_street_segment_curve_point(j, i));
         }
+
+        gisevo::core::Bounds seg_bounds;
+        seg_bounds.min_lat = seg_bounds.max_lat = segment.from_position.latitude();
+        seg_bounds.min_lon = seg_bounds.max_lon = segment.from_position.longitude();
+
+        auto expand_bounds = [&seg_bounds](const LatLon& point) {
+            seg_bounds.min_lat = std::min(seg_bounds.min_lat, point.latitude());
+            seg_bounds.max_lat = std::max(seg_bounds.max_lat, point.latitude());
+            seg_bounds.min_lon = std::min(seg_bounds.min_lon, point.longitude());
+            seg_bounds.max_lon = std::max(seg_bounds.max_lon, point.longitude());
+        };
+
+        expand_bounds(segment.to_position);
+        for (const auto& point : segment.curve_points) {
+            expand_bounds(point);
+        }
+
+        segment.bounds = seg_bounds;
 
         streets_[i] = std::move(segment);
     }
@@ -98,6 +120,21 @@ bool MapData::load_from_binary(const std::string& streets_path, const std::strin
             feature.points.push_back(database.get_feature_point(j, i));
         }
 
+        if (!feature.points.empty()) {
+            gisevo::core::Bounds feature_bounds;
+            feature_bounds.min_lat = feature_bounds.max_lat = feature.points.front().latitude();
+            feature_bounds.min_lon = feature_bounds.max_lon = feature.points.front().longitude();
+
+            for (const auto& point : feature.points) {
+                feature_bounds.min_lat = std::min(feature_bounds.min_lat, point.latitude());
+                feature_bounds.max_lat = std::max(feature_bounds.max_lat, point.latitude());
+                feature_bounds.min_lon = std::min(feature_bounds.min_lon, point.longitude());
+                feature_bounds.max_lon = std::max(feature_bounds.max_lon, point.longitude());
+            }
+
+            feature.bounds = feature_bounds;
+        }
+
         features_[i] = std::move(feature);
     }
 
@@ -120,58 +157,62 @@ void MapData::unload() {
 std::vector<std::size_t> MapData::streets_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    const auto& database = db();
-    auto lon_lat_indices = database.query_streets_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
+    std::vector<std::size_t> result;
+    result.reserve(streets_.size() / 10);
 
-    std::vector<std::size_t> filtered;
-    filtered.reserve(std::min(lon_lat_indices.size(), streets_.size()));
-
-    for (std::size_t idx : lon_lat_indices) {
-        if (idx >= streets_.size()) {
-            continue;
-        }
-
-        const auto& segment = streets_[idx];
-
-        bool inside = query.contains(segment.from_position) ||
-                       query.contains(segment.to_position);
-
-        if (!inside) {
-            for (const auto& point : segment.curve_points) {
-                if (query.contains(point)) {
-                    inside = true;
-                    break;
-                }
-            }
-        }
-
-        if (inside) {
-            filtered.push_back(idx);
+    for (const auto& street : streets_) {
+        if (street.bounds.intersects(query)) {
+            result.push_back(street.id);
         }
     }
 
-    return filtered;
+    return result;
 }
 
 std::vector<std::size_t> MapData::intersections_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    const auto& database = db();
-    return database.query_intersections_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
+    std::vector<std::size_t> result;
+    result.reserve(intersections_.size() / 10);
+
+    for (const auto& intersection : intersections_) {
+        if (query.contains(intersection.position)) {
+            result.push_back(intersection.id);
+        }
+    }
+
+    return result;
 }
 
 std::vector<std::size_t> MapData::pois_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    const auto& database = db();
-    return database.query_pois_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
+    std::vector<std::size_t> result;
+    result.reserve(pois_.size() / 10);
+
+    for (const auto& poi : pois_) {
+        if (query.contains(poi.position)) {
+            result.push_back(poi.id);
+        }
+    }
+
+    return result;
 }
 
 std::vector<std::size_t> MapData::features_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    const auto& database = db();
-    return database.query_features_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
+    std::vector<std::size_t> result;
+    result.reserve(features_.size() / 10);
+
+    for (const auto& feature : features_) {
+        if (!feature.bounds.intersects(query)) {
+            continue;
+        }
+        result.push_back(feature.id);
+    }
+
+    return result;
 }
 
 } // namespace gisevo::core

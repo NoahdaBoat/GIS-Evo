@@ -6,3 +6,4 @@ build/
 
 tasks.md
 future-plans.md
+*.osm.pbf

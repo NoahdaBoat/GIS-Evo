@@ -8,6 +8,7 @@ inc = include_directories('include', '../src')
 sources = [
   'src/main.cpp',
   'src/map_view.cpp',
+  'src/map_selector.cpp',
 ]
 
 executable('gis-evo-gtk4',

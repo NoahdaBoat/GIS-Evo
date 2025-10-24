@@ -9,28 +9,26 @@ namespace gisevo::rendering {
 CoordinateSystem::CoordinateSystem(const gisevo::core::Bounds& map_bounds) 
     : map_bounds_(map_bounds) {
     map_center_ = map_bounds.center();
-    // FIXED: map_lat_avg is already in radians (from find_map_bounds function)
-    // Don't convert it again!
     map_lat_avg_rad_ = map_center_.lat * kDegreeToRadian;
 }
 
 gisevo::core::Point2D CoordinateSystem::latlon_to_screen(const gisevo::core::LatLon& latlon) const {
-    double lat_rad = kDegreeToRadian * latlon.lat;
-    double lon_rad = kDegreeToRadian * latlon.lon;
-    
-    double x = kEarthRadiusInMeters * lon_rad * cos(map_lat_avg_rad_);
-    double y = kEarthRadiusInMeters * lat_rad;
-    
+    const double lat_delta_rad = kDegreeToRadian * (latlon.lat - map_center_.lat);
+    const double lon_delta_rad = kDegreeToRadian * (latlon.lon - map_center_.lon);
+
+    double x = kEarthRadiusInMeters * lon_delta_rad * cos(map_lat_avg_rad_);
+    double y = kEarthRadiusInMeters * lat_delta_rad;
+
     return gisevo::core::Point2D{x, y};
 }
 
 gisevo::core::LatLon CoordinateSystem::screen_to_latlon(const gisevo::core::Point2D& screen) const {
     double lat_rad = screen.y / kEarthRadiusInMeters;
     double lon_rad = screen.x / (kEarthRadiusInMeters * cos(map_lat_avg_rad_));
-    
-    double lat = lat_rad / kDegreeToRadian;
-    double lon = lon_rad / kDegreeToRadian;
-    
+
+    double lat = map_center_.lat + (lat_rad / kDegreeToRadian);
+    double lon = map_center_.lon + (lon_rad / kDegreeToRadian);
+
     return gisevo::core::LatLon(lat, lon);
 }
 
@@ -58,14 +56,14 @@ double CoordinateSystem::calculate_scale(int viewport_width, int viewport_height
 // RenderStyle definitions
 namespace styles {
     const RenderStyle street_default{
-        .line_width = 2.0,
-        .color = {0.2, 0.2, 0.2, 1.0},
+        .line_width = 2.5,
+        .color = {0.1, 0.1, 0.1, 1.0},
         .filled = false,
         .stroked = true
     };
     
     const RenderStyle street_highway{
-        .line_width = 3.0,
+        .line_width = 4.0,
         .color = {0.0, 0.0, 0.0, 1.0},
         .filled = false,
         .stroked = true
@@ -86,19 +84,19 @@ namespace styles {
     };
     
     const RenderStyle feature_park{
-        .color = {0.0, 0.8, 0.0, 0.3},
+        .color = {0.0, 0.8, 0.0, 0.2},
         .filled = true,
         .stroked = true
     };
     
     const RenderStyle feature_water{
-        .color = {0.0, 0.0, 0.8, 0.5},
+        .color = {0.0, 0.0, 0.8, 0.3},
         .filled = true,
         .stroked = true
     };
     
     const RenderStyle feature_building{
-        .color = {0.8, 0.0, 0.0, 0.4},
+        .color = {0.8, 0.0, 0.0, 0.2},
         .filled = true,
         .stroked = true
     };
@@ -159,10 +157,11 @@ void Renderer::draw_street(const gisevo::core::StreetSegment& street, const Rend
             cairo_line_to(impl_->cr, transformed.x, transformed.y);
         }
     } else {
-        // Draw straight line between intersections
-        // Note: This would need intersection data to be passed in
-        // For now, skip drawing if no curve points
-        return;
+        // Draw straight line between intersections using from_position and to_position
+        auto from_point = transform_point(street.from_position);
+        auto to_point = transform_point(street.to_position);
+        cairo_move_to(impl_->cr, from_point.x, from_point.y);
+        cairo_line_to(impl_->cr, to_point.x, to_point.y);
     }
     
     if (style.stroked) {

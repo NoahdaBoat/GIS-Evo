@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <gdk/gdkkeysyms.h>
+#include <iostream>
 #include "StreetsDatabaseAPI.h"
 
 namespace {
@@ -10,6 +11,7 @@ constexpr double kZoomStep = 1.1;
 constexpr double kMinZoom = 0.25;
 constexpr double kMaxZoom = 8.0;
 constexpr double kPanStep = 32.0;
+constexpr double LARGE_FEATURE_THRESHOLD = 0.01; // ~1% of map area
 }
 
 MapView::MapView(std::shared_ptr<gisevo::core::MapData> map_data)
@@ -20,6 +22,8 @@ MapView::MapView(std::shared_ptr<gisevo::core::MapData> map_data)
     , zoom_(1.0)  // Start with normal zoom level for debugging
     , drag_start_x_(0.0)
     , drag_start_y_(0.0)
+    , renderer_(std::make_unique<gisevo::rendering::Renderer>())
+    , coordinate_system_(nullptr)
 {
   gtk_widget_set_hexpand(drawing_area_, TRUE);
   gtk_widget_set_vexpand(drawing_area_, TRUE);
@@ -38,6 +42,8 @@ MapView::MapView(std::shared_ptr<gisevo::core::MapData> map_data)
   GtkEventController *key = gtk_event_controller_key_new();
   gtk_widget_add_controller(drawing_area_, key);
   g_signal_connect(key, "key-pressed", G_CALLBACK(MapView::key_press_cb), this);
+  
+  ensure_coordinate_system();
 }
 
 GtkWidget *MapView::widget() const
@@ -49,68 +55,84 @@ void MapView::draw(cairo_t *cr, int width, int height)
 {
   cairo_save(cr);
   
-  // Debug output
-  static int draw_count = 0;
-  if (draw_count++ % 60 == 0) {  // Every ~1 second at 60fps
-  g_print("DEBUG: GTK4 draw() called, width=%d, height=%d, zoom=%.3f\n", width, height, zoom_);
-  g_print("DEBUG: Global bounds check: min_lat=%.6f, max_lat=%.6f, min_lon=%.6f, max_lon=%.6f\n",
-          map_data_->bounds().min_lat, map_data_->bounds().max_lat, map_data_->bounds().min_lon, map_data_->bounds().max_lon);
+  // Safety check: ensure map data is valid before drawing
+  if (!map_data_ || !map_data_->load_success()) {
+    // Draw loading indicator or blank screen
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);  // Light gray background
+    cairo_paint(cr);
+    
+    // Draw a simple "Loading..." text
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);  // Dark gray text
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 24);
+    cairo_move_to(cr, width / 2.0 - 50, height / 2.0);
+    cairo_show_text(cr, "Loading...");
+    
+    cairo_restore(cr);
+    return;
   }
   
-  // Set background color
-  cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);  // White background for better contrast
+  // Additional safety check: ensure we have features to render
+  if (map_data_->feature_count() == 0) {
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);  // Light gray background
+    cairo_paint(cr);
+    cairo_restore(cr);
+    return;
+  }
+  
+  ensure_coordinate_system();
+
+  if (!renderer_ || !coordinate_system_) {
+    cairo_restore(cr);
+    return;
+  }
+
+  // Set background color to a light gray
+  cairo_set_source_rgb(cr, 0.95, 0.95, 0.95);
   cairo_paint(cr);
 
-  // Simplified coordinate transformation:
-  // 1. Calculate map center in lat/lon
-  double map_center_lat = (map_data_->bounds().min_lat + map_data_->bounds().max_lat) / 2.0;
-  double map_center_lon = (map_data_->bounds().min_lon + map_data_->bounds().max_lon) / 2.0;
-  
-  // 2. Convert map center to screen coordinates
-  gisevo::core::Point2D map_center_screen = latlon_to_screen(gisevo::core::LatLon(map_center_lat, map_center_lon));
-  
-  // 3. Calculate scale to fit map in viewport (80% of window)
-  gisevo::core::Point2D min_screen = latlon_to_screen(gisevo::core::LatLon(map_data_->bounds().min_lat, map_data_->bounds().min_lon));
-  gisevo::core::Point2D max_screen = latlon_to_screen(gisevo::core::LatLon(map_data_->bounds().max_lat, map_data_->bounds().max_lon));
-  double map_width = max_screen.x - min_screen.x;
-  double map_height = max_screen.y - min_screen.y;
-  double scale_x = (width * 0.8) / map_width;
-  double scale_y = (height * 0.8) / map_height;
-  double base_scale = std::min(scale_x, scale_y);
-  double final_scale = base_scale * zoom_;
-  
-  // 4. Apply transformations in order:
-  //    - Move to center of window
-  //    - Apply pan offset
-  //    - Scale to zoom level
-  //    - Move to center map at origin
-  cairo_translate(cr, width / 2.0 + offset_x_, height / 2.0 + offset_y_);
-  cairo_scale(cr, final_scale, final_scale);
-  cairo_translate(cr, -map_center_screen.x, -map_center_screen.y);
-  
-  // Debug: Print transformation info
-  static int center_debug_count = 0;
-  if (center_debug_count++ % 60 == 0) {
-    g_print("DEBUG: Map center: lat=%.6f, lon=%.6f, screen=(%.1f,%.1f)\n", 
-            map_center_lat, map_center_lon, map_center_screen.x, map_center_screen.y);
-    g_print("DEBUG: Scale: base=%.6f, final=%.6f, zoom=%.3f\n", 
-            base_scale, final_scale, zoom_);
-  }
+  const auto bounds = map_data_->bounds();
+  const double map_center_lat = (bounds.min_lat + bounds.max_lat) * 0.5;
+  const double map_center_lon = (bounds.min_lon + bounds.max_lon) * 0.5;
+  const gisevo::core::Point2D map_center_screen = latlon_to_screen(gisevo::core::LatLon(map_center_lat, map_center_lon));
 
-  // Debug: Print some actual feature coordinates after transformation
-  static int coord_debug_count = 0;
-  if (coord_debug_count++ % 60 == 0) {
-    g_print("DEBUG: Map center screen coordinates: (%.1f, %.1f)\n", map_center_screen.x, map_center_screen.y);
-    g_print("DEBUG: Current transformation: translate(%.1f, %.1f), scale(%.6f)\n", 
-            -map_center_screen.x, -map_center_screen.y, final_scale);
-  }
-  
-  // Draw map elements
-  draw_features(cr, width, height);
-  draw_streets(cr, width, height);
-  draw_intersections(cr, width, height);
-  draw_pois(cr, width, height);
+  const gisevo::core::Point2D min_screen = latlon_to_screen(gisevo::core::LatLon(bounds.min_lat, bounds.min_lon));
+  const gisevo::core::Point2D max_screen = latlon_to_screen(gisevo::core::LatLon(bounds.max_lat, bounds.max_lon));
 
+  const double map_width = std::max(std::abs(max_screen.x - min_screen.x), 1.0);
+  const double map_height = std::max(std::abs(max_screen.y - min_screen.y), 1.0);
+  const double scale_x = (width * 0.8) / map_width;
+  const double scale_y = (height * 0.8) / map_height;
+  const double base_scale = std::min(scale_x, scale_y);
+  const double final_scale = std::max(base_scale * zoom_, 1e-6);
+
+  ViewportBounds viewport_bounds = get_viewport_bounds(width, height, final_scale, map_center_screen);
+  viewport_cache_.ensure(viewport_bounds, *map_data_);
+
+  // Debug: Print viewport bounds and cached counts
+  std::cout << "Viewport bounds: lat[" << viewport_bounds.min_lat << ", " << viewport_bounds.max_lat 
+            << "] lon[" << viewport_bounds.min_lon << ", " << viewport_bounds.max_lon << "]" << std::endl;
+  std::cout << "Cached features: " << viewport_cache_.cached_features.size() 
+            << ", streets: " << viewport_cache_.cached_streets.size()
+            << ", intersections: " << viewport_cache_.cached_intersections.size() << std::endl;
+
+  const gisevo::core::Point2D renderer_offset{
+      offset_x_ - map_center_screen.x * final_scale,
+      offset_y_ - map_center_screen.y * final_scale};
+
+  renderer_->begin_frame(cr, width, height, final_scale, renderer_offset);
+
+  // Draw features first (as background)
+  draw_features_with_renderer();
+  
+  // Draw streets on top of features
+  draw_streets_with_renderer();
+  
+  // Draw intersections and POIs on top
+  draw_intersections_with_renderer();
+  draw_pois_with_renderer();
+
+  renderer_->end_frame();
   cairo_restore(cr);
 }
 
@@ -137,7 +159,6 @@ bool MapView::ViewportCache::should_invalidate(const ViewportBounds& new_bounds,
 
 void MapView::ViewportCache::update(const ViewportBounds& bounds, const gisevo::core::MapData& map_data) {
   cached_bounds = bounds;
-  
   // Query spatial data for the new bounds
   cached_streets = map_data.streets_in_bounds({bounds.min_lat, bounds.max_lat, bounds.min_lon, bounds.max_lon});
   cached_intersections = map_data.intersections_in_bounds({bounds.min_lat, bounds.max_lat, bounds.min_lon, bounds.max_lon});
@@ -288,103 +309,124 @@ gboolean MapView::key_press_cb(GtkEventControllerKey *, guint keyval, guint, Gdk
   return self->handle_key_press(keyval, state) ? GDK_EVENT_STOP : GDK_EVENT_PROPAGATE;
 }
 
+void MapView::ensure_coordinate_system()
+{
+  if (!renderer_) {
+    renderer_ = std::make_unique<gisevo::rendering::Renderer>();
+  }
+
+  if (!map_data_ || !map_data_->load_success()) {
+    coordinate_system_.reset();
+    coordinate_system_initialized_ = false;
+    if (renderer_) {
+      renderer_->set_coordinate_system(nullptr);
+    }
+    return;
+  }
+
+  const auto current_bounds = map_data_->bounds();
+
+  if (!coordinate_system_initialized_ || !bounds_equal(current_bounds, coordinate_system_bounds_)) {
+    coordinate_system_ = std::make_shared<gisevo::rendering::CoordinateSystem>(current_bounds);
+    renderer_->set_coordinate_system(coordinate_system_);
+    coordinate_system_bounds_ = current_bounds;
+    coordinate_system_initialized_ = true;
+    viewport_cache_.invalidate();
+  }
+}
+
+bool MapView::bounds_equal(const gisevo::core::Bounds &lhs, const gisevo::core::Bounds &rhs, double epsilon)
+{
+  return std::abs(lhs.min_lat - rhs.min_lat) <= epsilon &&
+         std::abs(lhs.max_lat - rhs.max_lat) <= epsilon &&
+         std::abs(lhs.min_lon - rhs.min_lon) <= epsilon &&
+         std::abs(lhs.max_lon - rhs.max_lon) <= epsilon;
+}
+
 // Coordinate conversion functions
 gisevo::core::Point2D MapView::latlon_to_screen(gisevo::core::LatLon latlon) const
 {
-  // Use proper geographic projection like the legacy system
-  // This matches the convertLatLonToXY function from ms1helpers.cpp
-  
-  // Constants from m1.h
+  if (coordinate_system_) {
+    return coordinate_system_->latlon_to_screen(latlon);
+  }
+
   const double kDegreeToRadian = 0.017453292519943295; // PI / 180
   const double kEarthRadiusInMeters = 6371000.0;
-  
-  // Convert lat/lon to radians
-  double lat_rad = kDegreeToRadian * latlon.latitude();
-  double lon_rad = kDegreeToRadian * latlon.longitude();
-  
-  // Use proper geographic projection with map's average latitude
-  double map_lat_avg_rad = map_data_->average_latitude_rad();
-  
+
+  const auto bounds = map_data_ ? map_data_->bounds() : gisevo::core::Bounds{};
+  const double center_lat = (bounds.min_lat + bounds.max_lat) * 0.5;
+  const double center_lon = (bounds.min_lon + bounds.max_lon) * 0.5;
+
+  double lat_rad = kDegreeToRadian * (latlon.latitude() - center_lat);
+  double lon_rad = kDegreeToRadian * (latlon.longitude() - center_lon);
+  double map_lat_avg_rad = map_data_ ? map_data_->average_latitude_rad() : 0.0;
+
   double x = kEarthRadiusInMeters * lon_rad * cos(map_lat_avg_rad);
   double y = kEarthRadiusInMeters * lat_rad;
-  
+
   return gisevo::core::Point2D{x, y};
 }
 
 LatLon MapView::screen_to_latlon(double x, double y) const
 {
-  // Convert screen coordinates to lat/lon accounting for map transformation
+  if (coordinate_system_) {
+    return coordinate_system_->screen_to_latlon(gisevo::core::Point2D{x, y});
+  }
+
   const double kDegreeToRadian = 0.017453292519943295; // PI / 180
   const double kEarthRadiusInMeters = 6371000.0;
-  double map_lat_avg_rad = map_data_->average_latitude_rad();
-  
-  // Apply inverse transformation to get coordinates in map space
-  // First, account for the map center translation
-  gisevo::core::Point2D map_center_screen = latlon_to_screen(gisevo::core::LatLon(
-    (map_data_->bounds().min_lat + map_data_->bounds().max_lat) / 2.0,
-    (map_data_->bounds().min_lon + map_data_->bounds().max_lon) / 2.0
-  ));
-  
-  // Convert screen coordinates to map coordinates
-  double map_x = x + map_center_screen.x;
-  double map_y = y + map_center_screen.y;
-  
-  // Convert map coordinates to lat/lon
+  double map_lat_avg_rad = map_data_ ? map_data_->average_latitude_rad() : 0.0;
+
+  const auto bounds = map_data_ ? map_data_->bounds() : gisevo::core::Bounds{};
+  const double center_lat = (bounds.min_lat + bounds.max_lat) * 0.5;
+  const double center_lon = (bounds.min_lon + bounds.max_lon) * 0.5;
+
+  double map_x = x;
+  double map_y = y;
+
   double lat_rad = map_y / kEarthRadiusInMeters;
   double lon_rad = map_x / (kEarthRadiusInMeters * cos(map_lat_avg_rad));
-  
-  double lat = lat_rad / kDegreeToRadian;
-  double lon = lon_rad / kDegreeToRadian;
-  
+
+  double lat = center_lat + (lat_rad / kDegreeToRadian);
+  double lon = center_lon + (lon_rad / kDegreeToRadian);
+
   return LatLon(lat, lon);
 }
 
-MapView::ViewportBounds MapView::get_viewport_bounds(int width, int height) const
+MapView::ViewportBounds MapView::get_viewport_bounds(int width, int height, double final_scale,
+                                                    const gisevo::core::Point2D &map_center_screen) const
 {
-  // Calculate viewport bounds based on current map transformation
-  // Get the map center in lat/lon
-  double map_center_lat = (map_data_->bounds().min_lat + map_data_->bounds().max_lat) / 2.0;
-  double map_center_lon = (map_data_->bounds().min_lon + map_data_->bounds().max_lon) / 2.0;
-  
-  // Calculate the scale factor used in the draw function
-  gisevo::core::Point2D min_screen = latlon_to_screen(gisevo::core::LatLon(map_data_->bounds().min_lat, map_data_->bounds().min_lon));
-  gisevo::core::Point2D max_screen = latlon_to_screen(gisevo::core::LatLon(map_data_->bounds().max_lat, map_data_->bounds().max_lon));
-  double map_width = max_screen.x - min_screen.x;
-  double map_height = max_screen.y - min_screen.y;
-  double scale_x = (width * 0.8) / map_width;
-  double scale_y = (height * 0.8) / map_height;
-  double scale = std::min(scale_x, scale_y) * zoom_;
-  
-  // Calculate viewport size in map coordinates
-  double viewport_width_map = width / scale;
-  double viewport_height_map = height / scale;
-  
-  // Convert viewport size to lat/lon degrees
-  const double kDegreeToRadian = 0.017453292519943295;
-  const double kEarthRadiusInMeters = 6371000.0;
-  double map_lat_avg_rad = map_data_->average_latitude_rad();
-  
-  double lat_range = viewport_height_map / kEarthRadiusInMeters / kDegreeToRadian;
-  double lon_range = viewport_width_map / (kEarthRadiusInMeters * cos(map_lat_avg_rad)) / kDegreeToRadian;
-  
-  // Calculate bounds around map center with full range
-  double padding = 0.001; // Very small padding
-  ViewportBounds bounds = {
-    map_center_lon - lon_range/2 - padding,  // Use /2 for full viewport
-    map_center_lat - lat_range/2 - padding,
-    map_center_lon + lon_range/2 + padding,
-    map_center_lat + lat_range/2 + padding
-  };
-  
-  // Debug output
-  static int bounds_debug_count = 0;
-  if (bounds_debug_count++ % 60 == 0) {  // Every ~1 second at 60fps
-    g_print("DEBUG: Viewport bounds: min_lon=%.6f, min_lat=%.6f, max_lon=%.6f, max_lat=%.6f\n", 
-            bounds.min_lon, bounds.min_lat, bounds.max_lon, bounds.max_lat);
-    g_print("DEBUG: Map center: lat=%.6f, lon=%.6f, scale=%.6f\n", 
-            map_center_lat, map_center_lon, scale);
+  ViewportBounds bounds{};
+
+  if (!map_data_ || width <= 0 || height <= 0 || final_scale <= 0.0) {
+    bounds.min_lat = bounds.max_lat = bounds.min_lon = bounds.max_lon = 0.0;
+    return bounds;
   }
-  
+
+  const auto pixel_to_latlon = [&](double px, double py) {
+    double map_x = ((px - width / 2.0 - offset_x_) / final_scale) + map_center_screen.x;
+    double map_y = ((py - height / 2.0 - offset_y_) / final_scale) + map_center_screen.y;
+    return screen_to_latlon(map_x, map_y);
+  };
+
+  const LatLon top_left = pixel_to_latlon(0.0, 0.0);
+  const LatLon top_right = pixel_to_latlon(static_cast<double>(width), 0.0);
+  const LatLon bottom_left = pixel_to_latlon(0.0, static_cast<double>(height));
+  const LatLon bottom_right = pixel_to_latlon(static_cast<double>(width), static_cast<double>(height));
+
+  double min_lat = std::min({top_left.latitude(), top_right.latitude(), bottom_left.latitude(), bottom_right.latitude()});
+  double max_lat = std::max({top_left.latitude(), top_right.latitude(), bottom_left.latitude(), bottom_right.latitude()});
+  double min_lon = std::min({top_left.longitude(), top_right.longitude(), bottom_left.longitude(), bottom_right.longitude()});
+  double max_lon = std::max({top_left.longitude(), top_right.longitude(), bottom_left.longitude(), bottom_right.longitude()});
+
+  const double lat_padding = std::max((max_lat - min_lat) * 0.05, 0.0005);
+  const double lon_padding = std::max((max_lon - min_lon) * 0.05, 0.0005);
+
+  bounds.min_lat = min_lat - lat_padding;
+  bounds.max_lat = max_lat + lat_padding;
+  bounds.min_lon = min_lon - lon_padding;
+  bounds.max_lon = max_lon + lon_padding;
+
   return bounds;
 }
 
@@ -398,177 +440,38 @@ bool MapView::is_visible_in_viewport(double x, double y, int width, int height) 
          screen_y >= -50 && screen_y <= height + 50;
 }
 
-// Map rendering functions
-void MapView::draw_streets(cairo_t *cr, int width, int height)
-{
-  cairo_set_line_width(cr, 2.0 / zoom_);  // Thicker lines
-  cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);  // Darker gray for streets
-  
-  // Get viewport bounds for spatial query
-  ViewportBounds bounds = get_viewport_bounds(width, height);
-  
-  // Use cached data if available, otherwise query and cache
-  viewport_cache_.ensure(bounds, *map_data_);
-  const auto& visible_streets = viewport_cache_.cached_streets;
-  
-  // Debug output
-  static int street_debug_count = 0;
-  if (street_debug_count++ % 60 == 0) {  // Every ~1 second at 60fps
-    g_print("DEBUG: draw_streets called, visible_streets=%zu, zoom=%.6f\n", 
-            visible_streets.size(), zoom_);
-  }
-  
-  int streets_drawn = 0;
-  for (std::size_t segment_idx : visible_streets) {
-    const auto& segment = map_data_->street(segment_idx);
-    
-    gisevo::core::Point2D from_screen = latlon_to_screen(segment.from_position);
-    gisevo::core::Point2D to_screen = latlon_to_screen(segment.to_position);
-    
-    streets_drawn++;
-    
-    // Draw street segment with curve points if they exist
-    if (!segment.curve_points.empty()) {
-      // Draw from intersection to first curve point
-      const auto& first_curve = segment.curve_points.front();
-      gisevo::core::Point2D first_curve_screen = latlon_to_screen(first_curve);
-      
-      cairo_move_to(cr, from_screen.x, from_screen.y);
-      cairo_line_to(cr, first_curve_screen.x, first_curve_screen.y);
-      
-      // Draw between curve points
-      for (std::size_t j = 0; j + 1 < segment.curve_points.size(); ++j) {
-        gisevo::core::Point2D curve1_screen = latlon_to_screen(segment.curve_points[j]);
-        gisevo::core::Point2D curve2_screen = latlon_to_screen(segment.curve_points[j + 1]);
-        
-        cairo_move_to(cr, curve1_screen.x, curve1_screen.y);
-        cairo_line_to(cr, curve2_screen.x, curve2_screen.y);
-      }
-      
-      // Draw from last curve point to intersection
-      gisevo::core::Point2D last_curve_screen = latlon_to_screen(segment.curve_points.back());
-      
-      cairo_move_to(cr, last_curve_screen.x, last_curve_screen.y);
-      cairo_line_to(cr, to_screen.x, to_screen.y);
-    } else {
-      // No curve points - draw straight line between intersections
-      cairo_move_to(cr, from_screen.x, from_screen.y);
-      cairo_line_to(cr, to_screen.x, to_screen.y);
-    }
-  }
-  
-  if (street_debug_count % 60 == 0) {
-    g_print("DEBUG: Drew %d streets out of %zu queried\n", streets_drawn, visible_streets.size());
-  }
-  
-  cairo_stroke(cr);
-}
-
-void MapView::draw_intersections(cairo_t *cr, int width, int height)
-{
-  cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);  // Bright red for intersections
-  
-  // Get viewport bounds for spatial query
-  ViewportBounds bounds = get_viewport_bounds(width, height);
-  
-  // Use cached data if available, otherwise query and cache
-  viewport_cache_.ensure(bounds, *map_data_);
-  const auto& visible_intersections = viewport_cache_.cached_intersections;
-  
-  for (std::size_t intersection_idx : visible_intersections) {
-    const auto& intersection = map_data_->intersection(intersection_idx);
-    gisevo::core::Point2D screen_pos = latlon_to_screen(intersection.position);
-    
-    cairo_arc(cr, screen_pos.x, screen_pos.y, 3.0 / zoom_, 0, 2 * M_PI);  // Larger dots
-    cairo_fill(cr);
-  }
-}
-
-void MapView::draw_pois(cairo_t *cr, int width, int height)
-{
-  cairo_set_source_rgb(cr, 0.0, 0.0, 1.0);  // Bright blue for POIs
-  
-  // Get viewport bounds for spatial query
-  ViewportBounds bounds = get_viewport_bounds(width, height);
-  
-  // Use cached data if available, otherwise query and cache
-  viewport_cache_.ensure(bounds, *map_data_);
-  const auto& visible_pois = viewport_cache_.cached_pois;
-  
-  for (std::size_t poi_idx : visible_pois) {
-    const auto& poi = map_data_->poi(poi_idx);
-    gisevo::core::Point2D screen_pos = latlon_to_screen(poi.position);
-    
-    cairo_rectangle(cr, screen_pos.x - 2.0 / zoom_, screen_pos.y - 2.0 / zoom_, 
-                    4.0 / zoom_, 4.0 / zoom_);  // Larger squares
-    cairo_fill(cr);
-  }
-}
-
-void MapView::draw_features(cairo_t *cr, int width, int height)
+// Map rendering functions - simplified approach with existing coordinate system
+void MapView::draw_features_by_type_simple(cairo_t *cr)
 {
   cairo_save(cr);
   
-  // Get viewport bounds for spatial query
-  ViewportBounds bounds = get_viewport_bounds(width, height);
-  
-  // Use cached data if available, otherwise query and cache
-  viewport_cache_.ensure(bounds, *map_data_);
-  const auto& visible_features = viewport_cache_.cached_features;
-  
-  // Debug output
-  static int feature_debug_count = 0;
-  if (feature_debug_count++ % 60 == 0) {  // Every ~1 second at 60fps
-    g_print("DEBUG: GTK4 draw_features called, visible_features=%zu, zoom=%.3f\n", 
-            visible_features.size(), zoom_);
-  }
-  
-  for (std::size_t feature_idx : visible_features) {
+  for (std::size_t feature_idx : viewport_cache_.cached_features) {
     const auto& feature = map_data_->feature(feature_idx);
-    
-    // Skip unknown features
-    if (feature.type == FeatureType::UNKNOWN) {
-      continue;
-    }
     
     if (feature.points.size() < 3) {
       continue;
     }
     
-    // Set color based on feature type - use very distinct colors
+    // Set color based on feature type
     switch (feature.type) {
       case FeatureType::PARK:
       case FeatureType::GREENSPACE:
-        cairo_set_source_rgb(cr, 0.0, 0.8, 0.0);  // Dark green for parks
+      case FeatureType::GOLFCOURSE:
+        cairo_set_source_rgba(cr, 0.0, 0.8, 0.0, 0.3);  // Green for parks
         break;
       case FeatureType::LAKE:
       case FeatureType::RIVER:
       case FeatureType::STREAM:
-        cairo_set_source_rgb(cr, 0.0, 0.0, 0.8);  // Dark blue for water
+      case FeatureType::GLACIER:
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.8, 0.5);  // Blue for water
         break;
       case FeatureType::BUILDING:
-        cairo_set_source_rgb(cr, 0.8, 0.0, 0.0);  // Dark red for buildings
-        break;
-      case FeatureType::BEACH:
-        cairo_set_source_rgb(cr, 0.8, 0.8, 0.0);  // Dark yellow for beaches
-        break;
-      case FeatureType::ISLAND:
-        cairo_set_source_rgb(cr, 0.6, 0.3, 0.0);  // Brown for islands
-        break;
-      case FeatureType::GOLFCOURSE:
-        cairo_set_source_rgb(cr, 0.0, 0.6, 0.0);  // Medium green for golf courses
-        break;
-      case FeatureType::GLACIER:
-        cairo_set_source_rgb(cr, 0.6, 0.6, 0.8);  // Light blue for glaciers
-        break;
-      case FeatureType::UNKNOWN:
-        cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);  // Gray for unknown
+        cairo_set_source_rgba(cr, 0.8, 0.0, 0.0, 0.4);  // Red for buildings
         break;
       default:
-        cairo_set_source_rgb(cr, 0.8, 0.0, 0.8);  // Purple for other features
+        cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.3);  // Gray for other
         break;
     }
-    
     
     // Draw feature as polygon
     bool first_point = true;
@@ -583,10 +486,284 @@ void MapView::draw_features(cairo_t *cr, int width, int height)
       }
     }
     
-    // Close the polygon and fill it
     cairo_close_path(cr);
     cairo_fill(cr);
   }
   
   cairo_restore(cr);
+}
+
+void MapView::draw_streets_by_classification_simple(cairo_t *cr)
+{
+  // Classify streets by speed limit for different visual styles
+  std::vector<std::size_t> highways, major_roads, minor_roads;
+  
+  for (std::size_t street_idx : viewport_cache_.cached_streets) {
+    const auto& street = map_data_->street(street_idx);
+    
+    // Classify based on speed limit
+    if (street.speed_limit_kph >= 80.0) {
+      highways.push_back(street_idx);
+    } else if (street.speed_limit_kph >= 50.0) {
+      major_roads.push_back(street_idx);
+    } else {
+      minor_roads.push_back(street_idx);
+    }
+  }
+  
+  // Level-of-Detail rendering based on zoom level
+  if (zoom_ < 0.5) {
+    // Very low zoom: Only show highways
+    draw_street_group(cr, highways, 3.0, 0.0, 0.0, 0.0);  // Black, thick
+  } else if (zoom_ < 1.5) {
+    // Low zoom: Show highways and major roads
+    draw_street_group(cr, major_roads, 2.0, 0.2, 0.2, 0.2);  // Dark gray
+    draw_street_group(cr, highways, 3.0, 0.0, 0.0, 0.0);     // Black, thick
+  } else {
+    // High zoom: Show all streets
+    draw_street_group(cr, minor_roads, 1.5, 0.4, 0.4, 0.4);  // Light gray
+    draw_street_group(cr, major_roads, 2.0, 0.2, 0.2, 0.2);  // Dark gray
+    draw_street_group(cr, highways, 3.0, 0.0, 0.0, 0.0);     // Black, thick
+  }
+}
+
+void MapView::draw_street_group(cairo_t *cr, const std::vector<std::size_t>& streets, 
+                               double line_width, double r, double g, double b)
+{
+  if (streets.empty()) return;
+  
+  cairo_save(cr);
+  cairo_set_line_width(cr, line_width / zoom_);
+  cairo_set_source_rgb(cr, r, g, b);
+  
+  for (std::size_t street_idx : streets) {
+    const auto& street = map_data_->street(street_idx);
+    
+    if (!street.curve_points.empty()) {
+      // Draw with curve points
+      gisevo::core::Point2D first_point = latlon_to_screen(street.curve_points[0]);
+      cairo_move_to(cr, first_point.x, first_point.y);
+      
+      for (std::size_t i = 1; i < street.curve_points.size(); ++i) {
+        gisevo::core::Point2D point = latlon_to_screen(street.curve_points[i]);
+        cairo_line_to(cr, point.x, point.y);
+      }
+    } else {
+      // Draw straight line between intersections
+      gisevo::core::Point2D from_point = latlon_to_screen(street.from_position);
+      gisevo::core::Point2D to_point = latlon_to_screen(street.to_position);
+      cairo_move_to(cr, from_point.x, from_point.y);
+      cairo_line_to(cr, to_point.x, to_point.y);
+    }
+  }
+  
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
+void MapView::draw_intersections_simple(cairo_t *cr)
+{
+  cairo_save(cr);
+  cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);  // Red for intersections
+  
+  for (std::size_t intersection_idx : viewport_cache_.cached_intersections) {
+    const auto& intersection = map_data_->intersection(intersection_idx);
+    gisevo::core::Point2D screen_pos = latlon_to_screen(intersection.position);
+    
+    cairo_arc(cr, screen_pos.x, screen_pos.y, 3.0 / zoom_, 0, 2 * M_PI);
+    cairo_fill(cr);
+  }
+  
+  cairo_restore(cr);
+}
+
+void MapView::draw_pois_simple(cairo_t *cr)
+{
+  cairo_save(cr);
+  cairo_set_source_rgb(cr, 0.0, 0.0, 1.0);  // Blue for POIs
+  
+  for (std::size_t poi_idx : viewport_cache_.cached_pois) {
+    const auto& poi = map_data_->poi(poi_idx);
+    gisevo::core::Point2D screen_pos = latlon_to_screen(poi.position);
+    
+    cairo_rectangle(cr, screen_pos.x - 2.0 / zoom_, screen_pos.y - 2.0 / zoom_, 
+                    4.0 / zoom_, 4.0 / zoom_);
+    cairo_fill(cr);
+  }
+  
+  cairo_restore(cr);
+}
+
+// New rendering methods using the clean renderer architecture
+void MapView::draw_features_with_renderer()
+{
+  if (!renderer_) {
+    return;
+  }
+  
+  // LOD: Filter features based on zoom level
+  // zoom_ < 0.5: Very far out - only major water bodies
+  // zoom_ < 1.5: Medium - add parks and large features  
+  // zoom_ >= 1.5: Close - show all features including buildings
+  
+  std::vector<std::size_t> parks, water_features, buildings, other_features;
+  
+  for (std::size_t feature_idx : viewport_cache_.cached_features) {
+    // Safety check: ensure feature index is valid
+    if (feature_idx >= map_data_->feature_count()) {
+      continue;
+    }
+    
+    const auto& feature = map_data_->feature(feature_idx);
+    
+    if (feature.points.size() < 3) continue;
+    
+    // Calculate feature area for LOD decisions
+    double area = calculate_feature_area(feature);
+    
+    switch (feature.type) {
+      case FeatureType::LAKE:
+      case FeatureType::RIVER:
+        // Only show major water bodies at low zoom
+        if (zoom_ < 0.8 || area > LARGE_FEATURE_THRESHOLD) {
+          water_features.push_back(feature_idx);
+        }
+        break;
+      case FeatureType::STREAM:
+        // Only show streams at high zoom
+        if (zoom_ >= 2.0) {
+          water_features.push_back(feature_idx);
+        }
+        break;
+      case FeatureType::GLACIER:
+        // Show glaciers at medium+ zoom
+        if (zoom_ >= 1.2) {
+          water_features.push_back(feature_idx);
+        }
+        break;
+      case FeatureType::PARK:
+      case FeatureType::GREENSPACE:
+      case FeatureType::GOLFCOURSE:
+        // Show parks at high zoom only
+        if (zoom_ >= 1.5) {
+          parks.push_back(feature_idx);
+        }
+        break;
+      case FeatureType::BUILDING:
+        // Only show buildings at very high zoom
+        if (zoom_ >= 3.0) {
+          buildings.push_back(feature_idx);
+        }
+        break;
+      default:
+        // Unknown features only at very high zoom
+        if (zoom_ >= 2.5) {
+          other_features.push_back(feature_idx);
+        }
+        break;
+    }
+  }
+  
+  // Render filtered features with LOD
+  renderer_->draw_features(water_features, *map_data_, gisevo::rendering::styles::feature_water);
+  renderer_->draw_features(parks, *map_data_, gisevo::rendering::styles::feature_park);
+  renderer_->draw_features(buildings, *map_data_, gisevo::rendering::styles::feature_building);
+  
+  gisevo::rendering::RenderStyle other_style;
+  other_style.color = {0.5, 0.5, 0.5, 0.15};
+  other_style.filled = true;
+  other_style.stroked = true;
+  renderer_->draw_features(other_features, *map_data_, other_style);
+}
+
+void MapView::draw_streets_with_renderer()
+{
+  if (!renderer_) {
+    return;
+  }
+  // Classify streets by speed limit for different visual styles
+  std::vector<std::size_t> highways, major_roads, minor_roads;
+  
+  for (std::size_t street_idx : viewport_cache_.cached_streets) {
+    const auto& street = map_data_->street(street_idx);
+    
+    // Classify based on speed limit
+    if (street.speed_limit_kph >= 80.0) {
+      highways.push_back(street_idx);
+    } else if (street.speed_limit_kph >= 50.0) {
+      major_roads.push_back(street_idx);
+    } else {
+      minor_roads.push_back(street_idx);
+    }
+  }
+  
+  // Level-of-Detail rendering based on zoom level
+  if (zoom_ < 0.5) {
+    // Very low zoom: Only show highways
+    renderer_->draw_streets(highways, *map_data_, gisevo::rendering::styles::street_highway);
+  } else if (zoom_ < 1.5) {
+    // Low zoom: Show highways and major roads
+    gisevo::rendering::RenderStyle major_style;
+    major_style.line_width = 2.5;
+    major_style.color = {0.15, 0.15, 0.15, 1.0};
+    major_style.stroked = true;
+    
+    renderer_->draw_streets(major_roads, *map_data_, major_style);
+    renderer_->draw_streets(highways, *map_data_, gisevo::rendering::styles::street_highway);
+  } else {
+    // High zoom: Show all streets
+    gisevo::rendering::RenderStyle minor_style;
+    minor_style.line_width = 1.8;
+    minor_style.color = {0.3, 0.3, 0.3, 1.0};
+    minor_style.stroked = true;
+    
+    gisevo::rendering::RenderStyle major_style;
+    major_style.line_width = 2.5;
+    major_style.color = {0.15, 0.15, 0.15, 1.0};
+    major_style.stroked = true;
+    
+    renderer_->draw_streets(minor_roads, *map_data_, minor_style);
+    renderer_->draw_streets(major_roads, *map_data_, major_style);
+    renderer_->draw_streets(highways, *map_data_, gisevo::rendering::styles::street_highway);
+  }
+}
+
+void MapView::draw_intersections_with_renderer()
+{
+  if (!renderer_) {
+    return;
+  }
+  renderer_->draw_intersections(viewport_cache_.cached_intersections, *map_data_, 
+                               gisevo::rendering::styles::intersection_default);
+}
+
+void MapView::draw_pois_with_renderer()
+{
+  if (!renderer_) {
+    return;
+  }
+  renderer_->draw_pois(viewport_cache_.cached_pois, *map_data_, 
+                      gisevo::rendering::styles::poi_default);
+}
+
+double MapView::calculate_feature_area(const gisevo::core::Feature& feature) const {
+  if (feature.points.size() < 3) return 0.0;
+  
+  // Safety check: ensure we have valid points
+  if (feature.points.empty()) return 0.0;
+  
+  // Simple bounding box area calculation
+  double min_lat = feature.points[0].lat;
+  double max_lat = feature.points[0].lat;
+  double min_lon = feature.points[0].lon;
+  double max_lon = feature.points[0].lon;
+  
+  for (const auto& point : feature.points) {
+    min_lat = std::min(min_lat, point.lat);
+    max_lat = std::max(max_lat, point.lat);
+    min_lon = std::min(min_lon, point.lon);
+    max_lon = std::max(max_lon, point.lon);
+  }
+  
+  return (max_lat - min_lat) * (max_lon - min_lon);
 }

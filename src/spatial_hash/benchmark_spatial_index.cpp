@@ -78,7 +78,7 @@ struct IndexTraits<SimpleSpatialIndex<T>> {
 
 template <typename T>
 struct IndexTraits<RTree<T>> {
-    static RTree<T> create() { return {}; }
+    static RTree<T> create() { return RTree<T>{}; }
     static constexpr const char* name() { return "RTree"; }
 };
 

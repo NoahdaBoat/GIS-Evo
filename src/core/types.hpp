@@ -37,6 +37,11 @@ struct Bounds {
         return point.latitude() >= min_lat && point.latitude() <= max_lat &&
                point.longitude() >= min_lon && point.longitude() <= max_lon;
     }
+
+    [[nodiscard]] bool intersects(const Bounds& other) const {
+        return !(other.min_lon > max_lon || other.max_lon < min_lon ||
+                 other.min_lat > max_lat || other.max_lat < min_lat);
+    }
 };
 
 struct StreetSegment {
@@ -49,6 +54,7 @@ struct StreetSegment {
     LatLon from_position;
     LatLon to_position;
     std::vector<LatLon> curve_points;
+    Bounds bounds{};
 };
 
 struct Intersection {
@@ -70,6 +76,7 @@ struct Feature {
     std::string name;
     bool is_closed = false;
     std::vector<LatLon> points;
+    Bounds bounds{};
 };
 
 } // namespace gisevo::core

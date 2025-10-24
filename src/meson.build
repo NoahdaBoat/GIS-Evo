@@ -13,6 +13,7 @@ inc = include_directories('.')
 core_sources = files(
   # Core data module (NEW)
   'core/map_data.cpp',
+  'core/renderer.cpp',
   
   # Binary loader (NEW)
   'binary_loader/binary_database.cpp',
