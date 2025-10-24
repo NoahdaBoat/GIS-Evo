@@ -579,8 +579,7 @@ void MapView::draw_pois_simple(cairo_t *cr)
     const auto& poi = map_data_->poi(poi_idx);
     gisevo::core::Point2D screen_pos = latlon_to_screen(poi.position);
     
-    cairo_rectangle(cr, screen_pos.x - 2.0 / zoom_, screen_pos.y - 2.0 / zoom_, 
-                    4.0 / zoom_, 4.0 / zoom_);
+    cairo_arc(cr, screen_pos.x, screen_pos.y, 2.0 / zoom_, 0, 2 * M_PI);
     cairo_fill(cr);
   }
   

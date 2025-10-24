@@ -191,11 +191,7 @@ void Renderer::draw_poi(const gisevo::core::POI& poi, const RenderStyle& style) 
     auto transformed = transform_point(poi.position);
     
     cairo_set_source_rgba(impl_->cr, style.color.r, style.color.g, style.color.b, style.color.a);
-    cairo_rectangle(impl_->cr, 
-                   transformed.x - style.point_size / impl_->zoom / 2,
-                   transformed.y - style.point_size / impl_->zoom / 2,
-                   style.point_size / impl_->zoom,
-                   style.point_size / impl_->zoom);
+    cairo_arc(impl_->cr, transformed.x, transformed.y, style.point_size / impl_->zoom, 0, 2 * M_PI);
     
     if (style.filled) {
         cairo_fill(impl_->cr);
