@@ -157,62 +157,33 @@ void MapData::unload() {
 std::vector<std::size_t> MapData::streets_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    std::vector<std::size_t> result;
-    result.reserve(streets_.size() / 10);
-
-    for (const auto& street : streets_) {
-        if (street.bounds.intersects(query)) {
-            result.push_back(street.id);
-        }
-    }
-
-    return result;
+    // Use spatial index for efficient querying
+    auto& database = db();
+    return database.query_streets_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
 }
 
 std::vector<std::size_t> MapData::intersections_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    std::vector<std::size_t> result;
-    result.reserve(intersections_.size() / 10);
-
-    for (const auto& intersection : intersections_) {
-        if (query.contains(intersection.position)) {
-            result.push_back(intersection.id);
-        }
-    }
-
-    return result;
+    // Use spatial index for efficient querying
+    auto& database = db();
+    return database.query_intersections_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
 }
 
 std::vector<std::size_t> MapData::pois_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    std::vector<std::size_t> result;
-    result.reserve(pois_.size() / 10);
-
-    for (const auto& poi : pois_) {
-        if (query.contains(poi.position)) {
-            result.push_back(poi.id);
-        }
-    }
-
-    return result;
+    // Use spatial index for efficient querying
+    auto& database = db();
+    return database.query_pois_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
 }
 
 std::vector<std::size_t> MapData::features_in_bounds(const Bounds& query) const {
     if (!query.is_valid()) return {};
 
-    std::vector<std::size_t> result;
-    result.reserve(features_.size() / 10);
-
-    for (const auto& feature : features_) {
-        if (!feature.bounds.intersects(query)) {
-            continue;
-        }
-        result.push_back(feature.id);
-    }
-
-    return result;
+    // Use spatial index for efficient querying
+    auto& database = db();
+    return database.query_features_in_bounds(query.min_lon, query.min_lat, query.max_lon, query.max_lat);
 }
 
 } // namespace gisevo::core
