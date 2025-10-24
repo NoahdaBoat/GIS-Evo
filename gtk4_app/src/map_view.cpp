@@ -109,13 +109,6 @@ void MapView::draw(cairo_t *cr, int width, int height)
   ViewportBounds viewport_bounds = get_viewport_bounds(width, height, final_scale, map_center_screen);
   viewport_cache_.ensure(viewport_bounds, *map_data_);
 
-  // Debug: Print viewport bounds and cached counts
-  std::cout << "Viewport bounds: lat[" << viewport_bounds.min_lat << ", " << viewport_bounds.max_lat 
-            << "] lon[" << viewport_bounds.min_lon << ", " << viewport_bounds.max_lon << "]" << std::endl;
-  std::cout << "Cached features: " << viewport_cache_.cached_features.size() 
-            << ", streets: " << viewport_cache_.cached_streets.size()
-            << ", intersections: " << viewport_cache_.cached_intersections.size() << std::endl;
-
   const gisevo::core::Point2D renderer_offset{
       offset_x_ - map_center_screen.x * final_scale,
       offset_y_ - map_center_screen.y * final_scale};
